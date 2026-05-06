@@ -106,7 +106,7 @@ const SuperAdminDashboard = () => {
   };
 
   const runMigration = async () => {
-    if (!window.confirm('ВНИМАНИЕ! Эта операция привяжет все старые данные к выбранной точке. Продолжить?')) return;
+    if (!window.confirm('ВНИМАНИЕ!бля Эта операция привяжет все старые данные к выбранной точке. Продолжить?')) return;
     
     const outletId = prompt('Введите ID точки, к которой нужно привязать старые данные:');
     if (!outletId) return;
