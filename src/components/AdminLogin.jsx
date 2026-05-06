@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-// Импортируем функции Firebase
 import { signInWithEmailAndPassword } from 'firebase/auth';
-import { auth } from '../firebase'; // Путь к нашему конфигу
+import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
+import { auth, db } from '../firebase';
 
 const AdminLogin = () => {
   const [email, setEmail] = useState('');
@@ -18,10 +18,28 @@ const AdminLogin = () => {
     setIsLoading(true);
 
     try {
-      // Магия Firebase: пытаемся войти
-      await signInWithEmailAndPassword(auth, email, password);
-      // Если ошибок нет, нас пустит сюда, и мы перекинем пользователя в дашборд
-      navigate('/admin');
+      const userCred = await signInWithEmailAndPassword(auth, email, password);
+      const user = userCred.user;
+
+      const userDoc = await getDoc(doc(db, 'users', user.uid));
+      if (userDoc.exists() && userDoc.data().role === 'superadmin') {
+        navigate('/superadmin');
+        return;
+      }
+
+      const q = query(collection(db, 'outlets'), where('ownerUid', '==', user.uid));
+      const snap = await getDocs(q);
+      
+      if (!snap.empty) {
+        const outlet = snap.docs[0].data();
+        if (outlet.slug) {
+          navigate(`/${outlet.slug}/admin`);
+        } else {
+          setError('Ошибка: точка не настроена (нет slug).');
+        }
+      } else {
+        setError('У вас нет привязанных точек. Обратитесь к суперадмину.');
+      }
     } catch (err) {
       console.error(err);
       // Обрабатываем частые ошибки
@@ -41,7 +59,7 @@ const AdminLogin = () => {
         
         <div className="text-center mb-8">
           <div className="inline-block bg-blue-50 px-4 py-2 rounded-lg mb-4 border border-blue-100">
-            <span className="font-bold text-xl tracking-wide text-blue-600">CRM Admin</span>
+            <span className="font-bold text-xl tracking-wide text-blue-600">Unitu Admin</span>
           </div>
           <h2 className="text-2xl font-semibold text-gray-800">Вход в панель</h2>
         </div>
@@ -61,7 +79,7 @@ const AdminLogin = () => {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
-              placeholder="admin@crm.com"
+              placeholder="admin@unitu.kz"
               required
             />
           </div>

@@ -5,12 +5,12 @@ import { getFirestore } from "firebase/firestore";
 
 // Твой конфиг из Firebase Console
 const firebaseConfig = {
-  apiKey: "AIzaSyCUQ6IZ-eoAG8qCq5yoRklIl34kVUNCq2U",
-  authDomain: "crm-fifty.firebaseapp.com",
-  projectId: "crm-fifty",
-  storageBucket: "crm-fifty.firebasestorage.app",
-  messagingSenderId: "37266175294",
-  appId: "1:37266175294:web:42118a3130c5b3e88de86f"
+  apiKey: "AIzaSyDH1sVswERvfGMgYDnYA-elfJanHETHV_4",
+  authDomain: "disk-60afb.firebaseapp.com",
+  projectId: "disk-60afb",
+  storageBucket: "disk-60afb.firebasestorage.app",
+  messagingSenderId: "558961236310",
+  appId: "1:558961236310:web:85c61e184f70d88c979ef7"
 };
 
 // Инициализация

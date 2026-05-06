@@ -1,7 +1,8 @@
 import { useEffect, useState, useRef } from 'react';
 import { Navigate } from 'react-router-dom';
 import { onAuthStateChanged } from 'firebase/auth';
-import { auth } from '../firebase';
+import { doc, getDoc } from 'firebase/firestore';
+import { auth, db } from '../firebase';
 
 const MIN_LOADING_MS = 2200; // Минимальное время показа оверлея, чтобы данные БД успели подтянуться
 
@@ -54,52 +55,72 @@ const LoadingOverlay = ({ fading }) => (
   </>
 );
 
-const ProtectedRoute = ({ children }) => {
+const ProtectedRoute = ({ children, allowedRoles }) => {
   const [user, setUser] = useState(null);
+  const [userData, setUserData] = useState(null);
   const [authResolved, setAuthResolved] = useState(false);
   const [overlayVisible, setOverlayVisible] = useState(true);
   const [overlayFading, setOverlayFading] = useState(false);
   const loadStartRef = useRef(Date.now());
 
   useEffect(() => {
-    // onAuthStateChanged слушает изменения статуса авторизации в Firebase
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      setUser(currentUser);
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      if (currentUser) {
+        setUser(currentUser);
+        try {
+          // Fetch user role from Firestore
+          const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
+          if (userDoc.exists()) {
+            setUserData(userDoc.data());
+          } else {
+            // Default to admin if no doc exists yet (or handle otherwise)
+            setUserData({ role: 'admin' });
+          }
+        } catch (err) {
+          console.error('Error fetching user data:', err);
+          setUserData({ role: 'admin' });
+        }
+      } else {
+        setUser(null);
+        setUserData(null);
+      }
       setAuthResolved(true);
     });
 
-    // Отписываемся от слушателя, когда компонент удаляется
     return () => unsubscribe();
   }, []);
 
   useEffect(() => {
     if (!authResolved) return;
 
-    // Выдерживаем минимальное время показа, чтобы данные в фоне загрузились
     const elapsed = Date.now() - loadStartRef.current;
     const remaining = Math.max(0, MIN_LOADING_MS - elapsed);
 
     const timer = setTimeout(() => {
-      // Сначала запускаем fade-out анимацию
       setOverlayFading(true);
-      // Потом полностью убираем оверлей из DOM
       setTimeout(() => setOverlayVisible(false), 500);
     }, remaining);
 
     return () => clearTimeout(timer);
   }, [authResolved]);
 
-  // Пока auth не проверен — показываем только оверлей (без контента под ним)
   if (!authResolved) {
     return <LoadingOverlay fading={false} />;
   }
 
-  // Если пользователя нет, жестко перенаправляем на страницу входа
   if (!user) {
     return <Navigate to="/admin/login" replace />;
   }
 
-  // Рендерим контент + прозрачный блюр-оверлей поверх, пока данные подгружаются
+  // Check roles if specified
+  if (allowedRoles && userData && !allowedRoles.includes(userData.role)) {
+    if (userData.role === 'superadmin') {
+      return <Navigate to="/superadmin" replace />;
+    } else {
+      return <Navigate to="/admin/login" replace />;
+    }
+  }
+
   return (
     <>
       {children}

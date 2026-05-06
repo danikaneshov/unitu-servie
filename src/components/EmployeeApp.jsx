@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { useParams } from 'react-router-dom';
 import { collection, query, where, getDocs, addDoc, updateDoc, doc, serverTimestamp, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase';
 import { LogOut, Camera, Loader2, CheckCircle2, UserPlus, PlayCircle, AlertCircle, XCircle, Clock, Banknote, CalendarDays, Flame, Minus, Plus } from 'lucide-react';
@@ -26,7 +27,28 @@ const EmployeeApp = () => {
   });
   
   const [employeesList, setEmployeesList] = useState([]);
+  const [outletSettings, setOutletSettings] = useState({
+    baseSalary: 3000, partnerBaseSalary: 1500, itemCommission: 1500, partnerItemCommission: 1500
+  });
   const [partnerId, setPartnerId] = useState('');
+
+  const { company_slug } = useParams();
+  const [boundOutletId, setBoundOutletId] = useState(null);
+  const [isSlugLoading, setIsSlugLoading] = useState(true);
+
+  useEffect(() => {
+    if (!company_slug) return;
+    const fetchOutlet = async () => {
+      const q = query(collection(db, 'outlets'), where('slug', '==', company_slug));
+      const snap = await getDocs(q);
+      if (!snap.empty) {
+        setBoundOutletId(snap.docs[0].id);
+      }
+      setIsSlugLoading(false);
+    };
+    fetchOutlet();
+  }, [company_slug]);
+
   
   const [currentShift, setCurrentShift] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -40,21 +62,26 @@ const EmployeeApp = () => {
   const [modal, setModal] = useState({ isOpen: false, type: '', title: '', message: '', data: null });
   const [selectedHistoryShift, setSelectedHistoryShift] = useState(null);
 
-  useEffect(() => {
-    const unsubEmp = onSnapshot(collection(db, 'employees'), (snap) => {
-      setEmployeesList(snap.docs.map(doc => ({ id: doc.id, name: doc.data().name })));
-    });
-    return () => unsubEmp();
-  }, []);
+
 
   useEffect(() => {
     if (!employee) return;
     
+    const unsubOutlet = onSnapshot(doc(db, 'outlets', employee.outletId), (docSnap) => {
+      if (docSnap.exists() && docSnap.data().settings) {
+        setOutletSettings(docSnap.data().settings);
+      }
+    });
+
+    const unsubEmp = onSnapshot(query(collection(db, 'employees'), where('outletId', '==', employee.outletId)), (snap) => {
+      setEmployeesList(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    });
+
     const d = new Date();
     if (d.getHours() < 6) d.setDate(d.getDate() - 1);
     const todayStr = d.toLocaleDateString('ru-RU');
 
-    const q = query(collection(db, 'sales'), where('dateStr', '==', todayStr));
+    const q = query(collection(db, 'sales'), where('dateStr', '==', todayStr), where('outletId', '==', employee.outletId));
     const unsubSales = onSnapshot(q, (snap) => {
       const todayShifts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       const openShift = todayShifts.find(s => s.status === 'open');
@@ -82,7 +109,7 @@ const EmployeeApp = () => {
       setMyShifts(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     });
 
-    return () => { unsubSales(); unsubMyShifts(); };
+    return () => { unsubOutlet(); unsubEmp(); unsubSales(); unsubMyShifts(); };
   }, [employee]);
 
   const availableMonths = (() => {
@@ -136,7 +163,7 @@ const EmployeeApp = () => {
     setIsLoading(true);
     setError(''); // Очищаем старую ошибку перед новой попыткой
     try {
-      const q = query(collection(db, 'employees'), where('pin', '==', pin));
+      const q = query(collection(db, 'employees'), where('pin', '==', pin), where('outletId', '==', boundOutletId));
       const snap = await getDocs(q);
       if (!snap.empty) {
         const empData = { id: snap.docs[0].id, ...snap.docs[0].data() };
@@ -171,6 +198,7 @@ const EmployeeApp = () => {
       const todayStr = d.toLocaleDateString('ru-RU');
       
       await addDoc(collection(db, 'sales'), {
+        outletId: employee.outletId,
         employeeId: employee.id, employeeName: employee.name,
         dateStr: todayStr, startTime: serverTimestamp(), status: 'open'
       });
@@ -182,48 +210,50 @@ const EmployeeApp = () => {
   const closeShiftInDb = async (c1, c2, imageUrl) => {
     let myEarned;
     let myTotalItems;
-    const myBase = employee.name.trim().toLowerCase() === 'tamerlan' ? 1500 : 3000;
+    const myBase = employee.customBaseSalary ? employee.customBaseSalary : outletSettings.baseSalary;
+    const ic = outletSettings.itemCommission;
+    const pic = outletSettings.partnerItemCommission;
 
     let ownerC1 = c1, ownerC2 = c2;
     let partnerC1, partnerC2;
 
     if (partnerId) {
       const partner = employeesList.find(emp => emp.id === partnerId);
+      const partnerBase = partner.customBaseSalary ? partner.customBaseSalary : outletSettings.partnerBaseSalary;
       
-      // Рассчитываем так, чтобы общее количество позиций делилось поровну,
-      // а если нечетно — владельцу (кто открыл) досталась 1 лишняя позиция.
       const targetOwnerTotal = Math.ceil((c1 + c2) / 2);
-      ownerC1 = Math.ceil(c1 / 2); // Владелец всегда получает приоритет по кальянам
-      ownerC2 = targetOwnerTotal - ownerC1; // Остаток добираем заменами
+      ownerC1 = Math.ceil(c1 / 2);
+      ownerC2 = targetOwnerTotal - ownerC1;
       
       partnerC1 = c1 - ownerC1;
       partnerC2 = c2 - ownerC2;
 
       myTotalItems = ownerC1 + ownerC2;
-      myEarned = myBase + (ownerC1 * 1500) + (ownerC2 * 1500);
+      myEarned = myBase + (ownerC1 * ic) + (ownerC2 * ic);
       
       const partnerTotalItems = partnerC1 + partnerC2;
       
       await addDoc(collection(db, 'sales'), {
+        outletId: employee.outletId,
         employeeId: partner.id, employeeName: partner.name,
         dateStr: currentShift.dateStr,
         endTime: serverTimestamp(), photoUrl: imageUrl,
         items: { cocktail1: partnerC1, cocktail2: partnerC2 },
-        totalItems: partnerTotalItems, earned: 1500 + (partnerC1 * 1500) + (partnerC2 * 1500),
-        baseSalary: 1500, hookahPercentage: (partnerC1 * 1500) + (partnerC2 * 1500),
+        totalItems: partnerTotalItems, earned: partnerBase + (partnerC1 * pic) + (partnerC2 * pic),
+        baseSalary: partnerBase, hookahPercentage: (partnerC1 * pic) + (partnerC2 * pic),
         shiftFraction: 0.5,
         status: 'closed'
       });
     } else {
       myTotalItems = c1 + c2;
-      myEarned = myBase + (c1 * 1500) + (c2 * 1500);
+      myEarned = myBase + (c1 * ic) + (c2 * ic);
     }
 
     await updateDoc(doc(db, 'sales', currentShift.id), {
       status: 'closed', endTime: serverTimestamp(), photoUrl: imageUrl,
       items: { cocktail1: ownerC1, cocktail2: ownerC2 },
       totalItems: myTotalItems, earned: myEarned,
-      baseSalary: myBase, hookahPercentage: (ownerC1 * 1500) + (ownerC2 * 1500),
+      baseSalary: myBase, hookahPercentage: (ownerC1 * ic) + (ownerC2 * ic),
       shiftFraction: 1
     });
   };
@@ -328,6 +358,22 @@ const EmployeeApp = () => {
     }
   };
 
+  
+  if (isSlugLoading) {
+    return <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>;
+  }
+
+  if (!boundOutletId) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4">
+        <div className="bg-white p-8 rounded-2xl shadow-sm text-center max-w-sm">
+          <h1 className="text-2xl font-black text-slate-800 mb-2">Точка не найдена</h1>
+          <p className="text-slate-500 mb-6 text-sm">Компания с адресом "/{company_slug}" не существует. Проверьте правильность ссылки.</p>
+        </div>
+      </div>
+    );
+  }
+
   if (!employee) {
     const handlePinClick = (n) => {
       if (navigator.vibrate) navigator.vibrate(50);
@@ -338,7 +384,7 @@ const EmployeeApp = () => {
       <div className="min-h-screen bg-gradient-to-b from-neutral-50 to-primary-light/30 dark:from-dark-bg dark:to-dark-surface flex flex-col items-center justify-center p-4 transition-colors">
         <Card variant="elevated" className="w-full max-w-sm p-8 flex flex-col items-center border-0 shadow-2xl dark:bg-dark-surface">
           <div className="mb-10 text-center">
-            <h1 className="text-3xl font-black tracking-tight text-slate-900 dark:text-white">ERP<span className="text-primary">.</span></h1>
+            <h1 className="text-3xl font-black tracking-tight text-slate-900 dark:text-white">Unitu<span className="text-primary">.</span></h1>
             <p className="text-slate-400 dark:text-slate-500 text-sm mt-2 font-medium">Введите ваш PIN-код</p>
           </div>
           

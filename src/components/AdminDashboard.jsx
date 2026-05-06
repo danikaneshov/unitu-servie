@@ -1,8 +1,9 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
-import { LogOut, Users, LayoutDashboard, Key, Trash2, Image, Settings, Menu, X, Percent, Wallet, Database, AlertTriangle, Clock, Banknote, CalendarDays, Calendar as CalendarIcon, Package, ArrowDownToLine, ArrowUpFromLine, Calculator, Ruler, ShoppingCart, CheckCircle2, Plus } from 'lucide-react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { Loader2, LogOut, Users, LayoutDashboard, Key, Trash2, Image, Settings, Menu, X, Percent, Wallet, Database, AlertTriangle, Clock, Banknote, CalendarDays, Calendar as CalendarIcon, Package, ArrowDownToLine, ArrowUpFromLine, Calculator, Ruler, ShoppingCart, CheckCircle2, Plus } from 'lucide-react';
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { signOut } from 'firebase/auth';
-import { collection, addDoc, onSnapshot, query, orderBy, deleteDoc, doc, serverTimestamp, setDoc, getDocs } from 'firebase/firestore';
+import { collection, addDoc, onSnapshot, query, orderBy, deleteDoc, doc, serverTimestamp, setDoc, getDocs, where, updateDoc } from 'firebase/firestore';
 import { auth, db } from '../firebase';
 import * as XLSX from 'xlsx';
 import { Card } from './ui/Card';
@@ -15,6 +16,17 @@ const formatMoney = (amount) => {
 };
 
 const AdminDashboard = () => {
+  const [currentUserUid, setCurrentUserUid] = useState(null);
+  const [outlets, setOutlets] = useState([]);
+  const [isOutletsLoaded, setIsOutletsLoaded] = useState(false);
+  const { company_slug } = useParams();
+  const navigate = useNavigate();
+  const currentOutlet = outlets.find(o => o.slug === company_slug);
+  const currentOutletId = currentOutlet ? currentOutlet.id : null;
+  const [outletSettings, setOutletSettings] = useState({
+    baseSalary: 3000, partnerBaseSalary: 1500, itemCommission: 1500, partnerItemCommission: 1500
+  });
+
   const [activeTab, setActiveTab] = useState('dashboard');
   const [subTab, setSubTab] = useState(''); // Суб-табы внутри разделов
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -116,11 +128,38 @@ const AdminDashboard = () => {
   });
 
   useEffect(() => {
-    const unsubEmp = onSnapshot(query(collection(db, 'employees'), orderBy('createdAt', 'desc')), (snap) => {
-      setEmployees(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    const unsubAuth = auth.onAuthStateChanged(user => {
+      if(user) setCurrentUserUid(user.uid);
+    });
+    return unsubAuth;
+  }, []);
+
+  useEffect(() => {
+    if (!currentUserUid) return;
+    const unsubOutlets = onSnapshot(query(collection(db, 'outlets'), where('ownerUid', '==', currentUserUid)), (snap) => {
+      const fetchedOutlets = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      setOutlets(fetchedOutlets);
+      setIsOutletsLoaded(true);
+    });
+    return () => unsubOutlets();
+  }, [currentUserUid]);
+
+  useEffect(() => {
+    if (currentOutlet) {
+      if (currentOutlet.settings) setOutletSettings(currentOutlet.settings);
+    }
+  }, [currentOutlet]);
+
+  useEffect(() => {
+    if (!currentOutletId) return;
+
+    const unsubEmp = onSnapshot(query(collection(db, 'employees'), where('outletId', '==', currentOutletId)), (snap) => {
+      const emps = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      emps.sort((a,b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+      setEmployees(emps);
     });
     
-    const unsubSales = onSnapshot(query(collection(db, 'sales')), (snap) => {
+    const unsubSales = onSnapshot(query(collection(db, 'sales'), where('outletId', '==', currentOutletId)), (snap) => {
       const shifts = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       shifts.sort((a, b) => {
         if (a.status === 'open' && b.status !== 'open') return -1;
@@ -130,34 +169,37 @@ const AdminDashboard = () => {
       setAllShifts(shifts);
     });
 
-    // Слушаем настройки прибыли из базы
     const unsubSettings = onSnapshot(doc(db, 'settings', 'profits'), (docSnap) => {
       if (docSnap.exists()) setOwnerProfits(docSnap.data());
     });
 
-    // Склад: стандарты
     const unsubInvStd = onSnapshot(doc(db, 'settings', 'inventory_standards'), (docSnap) => {
       if (docSnap.exists()) setInvStandards(docSnap.data());
     });
 
-    // Склад: движения
-    const unsubInvMov = onSnapshot(query(collection(db, 'inventory_movements'), orderBy('createdAt', 'desc')), (snap) => {
-      setInvMovements(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    const unsubInvMov = onSnapshot(query(collection(db, 'inventory_movements'), where('outletId', '==', currentOutletId)), (snap) => {
+      const movs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      movs.sort((a,b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+      setInvMovements(movs);
     });
 
-    // Склад: шаблоны
-    const unsubInvTemplates = onSnapshot(query(collection(db, 'inventory_templates'), orderBy('name', 'asc')), (snap) => {
-      setInvTemplates(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    const unsubInvTemplates = onSnapshot(query(collection(db, 'inventory_templates'), where('outletId', '==', currentOutletId)), (snap) => {
+      const temps = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      temps.sort((a,b) => a.name.localeCompare(b.name));
+      setInvTemplates(temps);
     });
 
     return () => { unsubEmp(); unsubSales(); unsubSettings(); unsubInvStd(); unsubInvMov(); unsubInvTemplates(); };
-  }, []);
+  }, [currentOutletId]);
 
   const handleSaveSettings = async () => {
     setIsSavingSettings(true);
     try {
+      if (currentOutletId) {
+        await updateDoc(doc(db, 'outlets', currentOutletId), { settings: outletSettings });
+      }
       await setDoc(doc(db, 'settings', 'profits'), ownerProfits);
-      alert('Настройки прибыли успешно сохранены!');
+      alert('Настройки успешно сохранены!');
     } catch (err) { alert('Ошибка сохранения: ' + err.message); }
     finally { setIsSavingSettings(false); }
   };
@@ -187,7 +229,9 @@ const AdminDashboard = () => {
         uploadedImageUrl = cloudData.secure_url;
       }
 
-      const ownerBase = emp.name.trim().toLowerCase() === 'tamerlan' ? 1500 : 3000;
+      const ownerBase = emp.customBaseSalary ? emp.customBaseSalary : outletSettings.baseSalary;
+      const ic = outletSettings.itemCommission;
+      const pic = outletSettings.partnerItemCommission;
 
       let partner = null;
       let c1 = Number(debugShift.hookahs) || 0;
@@ -196,7 +240,7 @@ const AdminDashboard = () => {
 
       if (debugShift.partnerId) {
         partner = employees.find(e => e.id === debugShift.partnerId);
-        const partnerBase = 1500; // Напарник всегда получает оклад 1500
+        const partnerBase = partner.customBaseSalary ? partner.customBaseSalary : outletSettings.partnerBaseSalary;
         
         let targetOwnerTotal = Math.ceil((c1 + c2) / 2);
         let ownerC1 = Math.ceil(c1 / 2);
@@ -205,39 +249,42 @@ const AdminDashboard = () => {
         let partnerC2 = c2 - ownerC2;
 
         let partnerTotalItems = partnerC1 + partnerC2;
-        let partnerEarned = partnerBase + (partnerC1 * 1500) + (partnerC2 * 1500);
+        let partnerEarned = partnerBase + (partnerC1 * pic) + (partnerC2 * pic);
 
         let ownerTotalItems = ownerC1 + ownerC2;
-        let ownerEarned = ownerBase + (ownerC1 * 1500) + (ownerC2 * 1500);
+        let ownerEarned = ownerBase + (ownerC1 * ic) + (ownerC2 * ic);
         
         await addDoc(collection(db, 'sales'), {
+          outletId: currentOutletId,
           employeeId: partner.id, employeeName: partner.name,
           dateStr: dStr, endTime: serverTimestamp(), photoUrl: uploadedImageUrl,
           items: { cocktail1: partnerC1, cocktail2: partnerC2 },
           totalItems: partnerTotalItems, earned: partnerEarned,
-          baseSalary: partnerBase, hookahPercentage: (partnerC1 * 1500) + (partnerC2 * 1500),
+          baseSalary: partnerBase, hookahPercentage: (partnerC1 * pic) + (partnerC2 * pic),
           shiftFraction: 0.5,
           status: 'closed'
         });
 
         await addDoc(collection(db, 'sales'), {
+          outletId: currentOutletId,
           employeeId: emp.id, employeeName: emp.name,
           dateStr: dStr, startTime: serverTimestamp(), endTime: serverTimestamp(), photoUrl: uploadedImageUrl,
           items: { cocktail1: ownerC1, cocktail2: ownerC2 },
           totalItems: ownerTotalItems, earned: ownerEarned,
-          baseSalary: ownerBase, hookahPercentage: (ownerC1 * 1500) + (ownerC2 * 1500),
+          baseSalary: ownerBase, hookahPercentage: (ownerC1 * ic) + (ownerC2 * ic),
           shiftFraction: 1,
           status: 'closed'
         });
 
       } else {
-        let myEarned = ownerBase + (c1 * 1500) + (c2 * 1500);
+        let myEarned = ownerBase + (c1 * ic) + (c2 * ic);
         await addDoc(collection(db, 'sales'), {
+          outletId: currentOutletId,
           employeeId: emp.id, employeeName: emp.name,
           dateStr: dStr, startTime: serverTimestamp(), endTime: serverTimestamp(), photoUrl: uploadedImageUrl,
           items: { cocktail1: c1, cocktail2: c2 },
           totalItems: myTotalItems, earned: myEarned,
-          baseSalary: ownerBase, hookahPercentage: (c1 * 1500) + (c2 * 1500),
+          baseSalary: ownerBase, hookahPercentage: (c1 * ic) + (c2 * ic),
           shiftFraction: 1,
           status: 'closed'
         });
@@ -258,11 +305,13 @@ const AdminDashboard = () => {
   const handleAddEmployee = async (e) => {
     e.preventDefault();
     if (!newEmpName || newEmpPin.length !== 4) return;
+    if (!currentOutletId) return alert('Выберите точку');
     setIsAdding(true);
     try {
       await addDoc(collection(db, 'employees'), {
+        outletId: currentOutletId,
         name: newEmpName, pin: newEmpPin.toString(),
-        createdAt: serverTimestamp(), baseSalary: 3000, bonus1: 1500, bonus2: 1500
+        createdAt: serverTimestamp(), baseSalary: outletSettings.baseSalary, bonus1: outletSettings.itemCommission, bonus2: outletSettings.itemCommission
       });
       setNewEmpName(''); setNewEmpPin('');
     } catch (error) { console.error(error); } finally { setIsAdding(false); }
@@ -307,9 +356,7 @@ const AdminDashboard = () => {
     const replacements = filteredShifts.reduce((a, b) => a + (b.items?.cocktail2 || 0), 0);
     const ownerProfit = (hookahs * ownerProfits.hookah) + (replacements * ownerProfits.replacement);
     
-    const tamerlanEarned = filteredShifts
-      .filter(s => s.employeeName && s.employeeName.trim().toLowerCase() === 'tamerlan')
-      .reduce((a, b) => a + (b.earned || 0), 0);
+    const tamerlanEarned = 0;
     
     const purchases = invMovements
       .filter(m => m.type === 'in' && (isAll || (m.dateStr && m.dateStr.endsWith(`.${selectedMonth}`))))
@@ -375,6 +422,38 @@ const AdminDashboard = () => {
     setIsMobileMenuOpen(false);
   };
 
+  if (!currentUserUid || !isOutletsLoaded) {
+    return (
+      <div className="flex h-screen bg-[#F8FAFC] items-center justify-center p-4">
+        <Loader2 className="w-8 h-8 animate-spin text-primary mb-4"/>
+        <p className="text-slate-500 font-medium">Загрузка данных...</p>
+      </div>
+    );
+  }
+
+  if (outlets.length === 0) {
+    return (
+      <div className="flex h-screen bg-[#F8FAFC] items-center justify-center p-4 text-center">
+        <div>
+          <h1 className="text-2xl font-black text-slate-800 mb-2">Нет привязанных точек</h1>
+          <p className="text-slate-500 mb-6">За вашим аккаунтом не закреплено ни одной точки. Пожалуйста, обратитесь к Суперадминистратору.</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!currentOutlet) {
+    return (
+      <div className="flex h-screen bg-[#F8FAFC] items-center justify-center p-4 text-center">
+        <div>
+          <h1 className="text-2xl font-black text-slate-800 mb-2">Доступ запрещен</h1>
+          <p className="text-slate-500 mb-6">Точка с адресом /{company_slug} не найдена или у вас нет к ней доступа.</p>
+          <button onClick={() => navigate('/' + outlets[0].slug + '/admin')} className="px-6 py-3 bg-primary text-white rounded-xl font-bold">Перейти к моей точке</button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-screen bg-[#F8FAFC] relative no-select">
       
@@ -388,7 +467,7 @@ const AdminDashboard = () => {
 
       {/* Sidebar (Адаптивный) */}
       <div className={`fixed lg:static inset-y-0 left-0 z-40 transform ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 transition-transform duration-300 w-72 bg-white border-r border-slate-200 flex flex-col p-6 shadow-2xl lg:shadow-none`}>
-        <div className="mb-10 px-2 mt-12 lg:mt-0"><span className="text-2xl font-black tracking-tighter text-slate-900">ERP<span className="text-primary">.</span></span></div>
+        <div className="mb-10 px-2 mt-12 lg:mt-0"><span className="text-2xl font-black tracking-tighter text-slate-900">Unitu<span className="text-primary">.</span></span></div>
         <nav className="flex-1 space-y-2">
           <button onClick={() => switchTab('dashboard')} className={`w-full flex items-center gap-3 p-4 rounded-2xl font-bold transition-all ${activeTab === 'dashboard' ? 'bg-primary text-white shadow-lg shadow-primary-light/50 translate-x-2' : 'text-slate-400 hover:bg-slate-50 hover:text-slate-700 hover:translate-x-1'}`}><LayoutDashboard size={20}/>Дашборд</button>
           <button onClick={() => switchTab('shifts', 'calendar')} className={`w-full flex items-center gap-3 p-4 rounded-2xl font-bold transition-all ${activeTab === 'shifts' ? 'bg-primary text-white shadow-lg shadow-primary-light/50 translate-x-2' : 'text-slate-400 hover:bg-slate-50 hover:text-slate-700 hover:translate-x-1'}`}><CalendarIcon size={20}/>Смены</button>
@@ -408,7 +487,36 @@ const AdminDashboard = () => {
         {/* ВКЛАДКА 1: ДАШБОРД */}
         {activeTab === 'dashboard' && (
           <div className="space-y-10 animate-in fade-in duration-300">
-            <h1 className="text-2xl font-bold text-slate-800">Общая статистика</h1>
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div>
+                <p className="text-slate-400 font-bold text-sm uppercase tracking-widest mb-1">Управление точкой</p>
+                <h1 className="text-3xl font-black text-slate-800 tracking-tight">{currentOutlet?.name || 'Загрузка...'}</h1>
+              </div>
+              <div className="flex flex-col md:flex-row items-start md:items-center gap-4">
+                {outlets.length > 1 && (
+                  <div className="flex bg-white/60 backdrop-blur-md p-1 rounded-2xl border border-slate-200/60 shadow-sm">
+                    {outlets.map(o => (
+                      <button
+                        key={o.id}
+                        onClick={() => navigate('/' + o.slug + '/admin')}
+                        className={`px-5 py-2.5 rounded-xl font-bold text-sm transition-all duration-300 flex-1 md:flex-none whitespace-nowrap ${
+                          o.id === currentOutletId 
+                            ? 'bg-white text-primary shadow-sm scale-100 ring-1 ring-slate-100' 
+                            : 'text-slate-500 hover:text-slate-700 hover:bg-white/50 scale-[0.98]'
+                        }`}
+                      >
+                        {o.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {currentOutletId && (
+                  <a href={`/${currentOutlet?.slug}`} target="_blank" rel="noreferrer" className="flex items-center justify-center gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold px-6 py-3 rounded-xl transition-all shadow-[0_0_20px_rgba(59,130,246,0.3)] hover:shadow-[0_0_25px_rgba(59,130,246,0.5)] hover:-translate-y-0.5 text-sm whitespace-nowrap">
+                    Открыть терминал
+                  </a>
+                )}
+              </div>
+            </div>
             
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
               <Card variant="elevated" className="p-6 card-hover-effect">
@@ -737,8 +845,7 @@ const AdminDashboard = () => {
                       <div className="text-right sm:mt-0 mt-4">
                         <p className="font-bold text-xs uppercase tracking-widest mb-1 opacity-80">Грязная прибыль</p>
                         <h4 className="text-2xl font-black">{formatMoney(monthlyStats.ownerProfit)} ₸</h4>
-                        <p className="font-bold text-xs uppercase tracking-widest mb-1 opacity-80 mt-4 text-green-200">Без вычета ЗП Tamerlan</p>
-                        <h4 className="text-xl font-black text-white">{formatMoney(monthlyStats.profitWithoutTamerlan)} ₸</h4>
+                        
                       </div>
                     </div>
                   </div>
@@ -930,7 +1037,7 @@ const AdminDashboard = () => {
             setIsSavingInv(true);
             try {
               const now = new Date();
-              await addDoc(collection(db, 'inventory_movements'), {
+              await addDoc(collection(db, 'inventory_movements'), { outletId: currentOutletId, outletId: currentOutletId,
                 type: invForm.type, item: invForm.item,
                 amount: Number(invForm.amount), 
                 cost: invForm.type === 'in' ? Number(invForm.cost || 0) : 0,
@@ -973,7 +1080,7 @@ const AdminDashboard = () => {
               const now = new Date();
               const dateStr = `${String(now.getDate()).padStart(2,'0')}.${String(now.getMonth()+1).padStart(2,'0')}.${now.getFullYear()}`;
               await Promise.all(invCart.map(item =>
-                addDoc(collection(db, 'inventory_movements'), {
+                addDoc(collection(db, 'inventory_movements'), { outletId: currentOutletId,
                   type: 'in',
                   item: item.item,
                   amount: item.amountPerUnit * item.quantity,
@@ -1002,7 +1109,7 @@ const AdminDashboard = () => {
             if (!newTemplate.name || !newTemplate.amount) return;
             setIsSavingInv(true);
             try {
-              await addDoc(collection(db, 'inventory_templates'), {
+              await addDoc(collection(db, 'inventory_templates'), { outletId: currentOutletId,
                 ...newTemplate,
                 amount: Number(newTemplate.amount),
                 price: Number(newTemplate.price || 0),
@@ -1213,7 +1320,7 @@ const AdminDashboard = () => {
               <div className="space-y-6">
                 <h1 className="text-2xl font-bold text-slate-800">Списание</h1>
                 <div className="bg-white p-8 rounded-[32px] border border-slate-100 shadow-sm max-w-xl">
-                  <form onSubmit={async (e) => { e.preventDefault(); if (!invForm.amount || Number(invForm.amount) <= 0) return alert('Укажите количество'); setIsSavingInv(true); try { const now = new Date(); await addDoc(collection(db, 'inventory_movements'), { type: 'writeoff', item: invForm.item, amount: Number(invForm.amount), cost: 0, note: invForm.note || '', dateStr: `${String(now.getDate()).padStart(2,'0')}.${String(now.getMonth()+1).padStart(2,'0')}.${now.getFullYear()}`, createdAt: serverTimestamp() }); setInvForm({ type: 'in', item: 'coal', amount: '', cost: '', note: '', templateId: '' }); } catch (err) { alert('Ошибка: ' + err.message); } finally { setIsSavingInv(false); } }} className="space-y-5">
+                  <form onSubmit={async (e) => { e.preventDefault(); if (!invForm.amount || Number(invForm.amount) <= 0) return alert('Укажите количество'); setIsSavingInv(true); try { const now = new Date(); await addDoc(collection(db, 'inventory_movements'), { outletId: currentOutletId, outletId: currentOutletId, type: 'writeoff', item: invForm.item, amount: Number(invForm.amount), cost: 0, note: invForm.note || '', dateStr: `${String(now.getDate()).padStart(2,'0')}.${String(now.getMonth()+1).padStart(2,'0')}.${now.getFullYear()}`, createdAt: serverTimestamp() }); setInvForm({ type: 'in', item: 'coal', amount: '', cost: '', note: '', templateId: '' }); } catch (err) { alert('Ошибка: ' + err.message); } finally { setIsSavingInv(false); } }} className="space-y-5">
                     <div><label className="block text-xs font-bold text-slate-400 uppercase mb-2">Товар</label><select value={invForm.item} onChange={e => setInvForm({...invForm, item: e.target.value})} className="w-full p-4 bg-slate-50 rounded-2xl border-none font-bold text-lg text-slate-800"><option value="coal">🔥 Уголь (шт)</option><option value="tobacco">🍃 Табак (г)</option><option value="mouthpiece">💠 Мундштуки (шт)</option></select></div>
                     <div><label className="block text-xs font-bold text-slate-400 uppercase mb-2">Количество</label><input type="number" min="1" value={invForm.amount} onChange={e => setInvForm({...invForm, amount: e.target.value})} placeholder="Сколько списать" className="w-full p-4 bg-slate-50 rounded-2xl border-none font-bold text-lg text-slate-800" required /></div>
                     <div><label className="block text-xs font-bold text-slate-400 uppercase mb-2">Причина</label><input type="text" value={invForm.note} onChange={e => setInvForm({...invForm, note: e.target.value})} placeholder="Например: отправил на вторую точку" className="w-full p-4 bg-slate-50 rounded-2xl border-none font-bold text-slate-800" /></div>
@@ -1280,9 +1387,14 @@ const AdminDashboard = () => {
 
             {subTab === 'margins' && (
               <div className="max-w-2xl"><div className="bg-white p-10 rounded-[40px] border border-slate-100 shadow-sm">
-                <h2 className="text-lg font-black text-slate-900 mb-2">Маржинальность</h2>
-                <p className="text-slate-500 mb-8 text-sm">Укажи свою чистую прибыль с каждой позиции.</p>
+                <h2 className="text-lg font-black text-slate-900 mb-6">Настройки точки и маржинальность</h2>
                 <div className="space-y-6">
+                  <div><label className="block text-xs font-bold text-slate-400 uppercase mb-2">Базовый оклад мастера (₸)</label><input type="number" value={outletSettings.baseSalary} onChange={e=>setOutletSettings({...outletSettings, baseSalary: Number(e.target.value)})} className="w-full p-4 bg-slate-50 rounded-2xl border-none focus:ring-2 focus:ring-blue-500 font-black text-lg text-slate-800" /></div>
+                  <div><label className="block text-xs font-bold text-slate-400 uppercase mb-2">Базовый оклад напарника (₸)</label><input type="number" value={outletSettings.partnerBaseSalary} onChange={e=>setOutletSettings({...outletSettings, partnerBaseSalary: Number(e.target.value)})} className="w-full p-4 bg-slate-50 rounded-2xl border-none focus:ring-2 focus:ring-blue-500 font-black text-lg text-slate-800" /></div>
+                  <div><label className="block text-xs font-bold text-slate-400 uppercase mb-2">Ставка за 1 кальян/замену (₸)</label><input type="number" value={outletSettings.itemCommission} onChange={e=>setOutletSettings({...outletSettings, itemCommission: Number(e.target.value)})} className="w-full p-4 bg-slate-50 rounded-2xl border-none focus:ring-2 focus:ring-blue-500 font-black text-lg text-slate-800" /></div>
+                  <div><label className="block text-xs font-bold text-slate-400 uppercase mb-2">Ставка напарника за кальян/замену (₸)</label><input type="number" value={outletSettings.partnerItemCommission} onChange={e=>setOutletSettings({...outletSettings, partnerItemCommission: Number(e.target.value)})} className="w-full p-4 bg-slate-50 rounded-2xl border-none focus:ring-2 focus:ring-blue-500 font-black text-lg text-slate-800" /></div>
+
+                  <h3 className="text-lg font-black text-slate-900 mt-8 mb-2 border-t border-slate-100 pt-8">Чистая прибыль аутсорса</h3>
                   <div><label className="block text-xs font-bold text-slate-400 uppercase mb-2">Прибыль с 1 Кальяна (₸)</label><input type="number" value={ownerProfits.hookah} onChange={e=>setOwnerProfits({...ownerProfits, hookah: Number(e.target.value)})} className="w-full p-4 bg-slate-50 rounded-2xl border-none focus:ring-2 focus:ring-blue-500 font-black text-lg text-slate-800" /></div>
                   <div><label className="block text-xs font-bold text-slate-400 uppercase mb-2">Прибыль с 1 Замены (₸)</label><input type="number" value={ownerProfits.replacement} onChange={e=>setOwnerProfits({...ownerProfits, replacement: Number(e.target.value)})} className="w-full p-4 bg-slate-50 rounded-2xl border-none focus:ring-2 focus:ring-blue-500 font-black text-lg text-slate-800" /></div>
                   <button onClick={handleSaveSettings} disabled={isSavingSettings} className="w-full p-4 mt-4 bg-blue-600 text-white rounded-2xl font-bold shadow-lg shadow-blue-100 disabled:opacity-50">{isSavingSettings ? 'Сохранение...' : 'Сохранить настройки'}</button>
