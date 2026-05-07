@@ -1,7 +1,7 @@
 {
-  "name": "Fifty Client",
-  "short_name": "Fifty",
-  "description": "Fifty ERP — Client",
+  "name": "Unitu Client",
+  "short_name": "Unitu",
+  "description": "Unitu — Client",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

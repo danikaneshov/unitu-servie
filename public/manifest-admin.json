@@ -1,7 +1,7 @@
 {
-  "name": "Fifty ERP",
-  "short_name": "Fifty Admin",
-  "description": "Fifty ERP — Admin Panel",
+  "name": "Unitu",
+  "short_name": "Unitu Admin",
+  "description": "Unitu — Admin Panel",
   "start_url": "/admin",
   "scope": "/admin",
   "display": "standalone",
