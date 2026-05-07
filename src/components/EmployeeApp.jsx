@@ -1,7 +1,8 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import { collection, query, where, getDocs, addDoc, updateDoc, doc, serverTimestamp, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase';
+import { formatMoney } from '../utils/formatMoney';
 import { LogOut, Camera, Loader2, CheckCircle2, UserPlus, PlayCircle, AlertCircle, XCircle, Clock, Banknote, CalendarDays, Flame, Minus, Plus } from 'lucide-react';
 import heic2any from 'heic2any';
 import imageCompression from 'browser-image-compression';
@@ -12,10 +13,7 @@ import { Badge } from './ui/Badge';
 const CLOUDINARY_URL = 'https://api.cloudinary.com/v1_1/dl5vgfkvr/image/upload';
 const UPLOAD_PRESET = 'ml_default';
 
-const formatMoney = (amount) => {
-  if (amount === undefined || amount === null) return 0;
-  return amount.toString().replace(/\B(?=(\d{3})+(?!\d))/g, " ");
-};
+
 
 const EmployeeApp = () => {
   const [pin, setPin] = useState('');
@@ -67,14 +65,14 @@ const EmployeeApp = () => {
   useEffect(() => {
     if (!employee) return;
     
-    const unsubOutlet = onSnapshot(doc(db, 'outlets', employee.outletId), (docSnap) => {
-      if (docSnap.exists() && docSnap.data().settings) {
-        setOutletSettings(docSnap.data().settings);
+    const unsubOutlet = onSnapshot(doc(db, 'outlets', employee.outletId), (outletSnap) => {
+      if (outletSnap.exists() && outletSnap.data().settings) {
+        setOutletSettings(outletSnap.data().settings);
       }
     });
 
     const unsubEmp = onSnapshot(query(collection(db, 'employees'), where('outletId', '==', employee.outletId)), (snap) => {
-      setEmployeesList(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      setEmployeesList(snap.docs.map(empDoc => ({ id: empDoc.id, ...empDoc.data() })));
     });
 
     const d = new Date();
@@ -83,7 +81,7 @@ const EmployeeApp = () => {
 
     const q = query(collection(db, 'sales'), where('dateStr', '==', todayStr), where('outletId', '==', employee.outletId));
     const unsubSales = onSnapshot(q, (snap) => {
-      const todayShifts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const todayShifts = snap.docs.map(saleDoc => ({ id: saleDoc.id, ...saleDoc.data() }));
       const openShift = todayShifts.find(s => s.status === 'open');
       const closedShifts = todayShifts.filter(s => s.status === 'closed');
 
@@ -106,13 +104,13 @@ const EmployeeApp = () => {
     });
 
     const unsubMyShifts = onSnapshot(query(collection(db, 'sales'), where('employeeId', '==', employee.id)), (snap) => {
-      setMyShifts(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      setMyShifts(snap.docs.map(saleDoc => ({ id: saleDoc.id, ...saleDoc.data() })));
     });
 
     return () => { unsubOutlet(); unsubEmp(); unsubSales(); unsubMyShifts(); };
   }, [employee]);
 
-  const availableMonths = (() => {
+  const availableMonths = useMemo(() => {
     const months = new Set();
     myShifts.forEach(s => {
       if (s.dateStr) months.add(s.dateStr.split('.').slice(1).join('.'));
@@ -126,14 +124,14 @@ const EmployeeApp = () => {
       if (y1 !== y2) return y2 - y1;
       return m2 - m1;
     });
-  })();
+  }, [myShifts]);
 
-  const [selectedMonth, setSelectedMonth] = useState(availableMonths[0] || (() => {
+  const [selectedMonth, setSelectedMonth] = useState(() => {
     const now = new Date();
     return `${String(now.getMonth() + 1).padStart(2, '0')}.${now.getFullYear()}`;
-  })());
+  });
 
-  const myStats = (() => {
+  const myStats = useMemo(() => {
     let empShifts = myShifts;
     if (selectedMonth && selectedMonth !== 'all') {
       empShifts = empShifts.filter(s => s.dateStr && s.dateStr.endsWith(`.${selectedMonth}`));
@@ -146,17 +144,17 @@ const EmployeeApp = () => {
     const hookahPercentageTotal = closedShifts.reduce((sum, s) => sum + (s.hookahPercentage || 0), 0);
     const shiftsCount = closedShifts.reduce((sum, s) => sum + (s.shiftFraction || 1), 0);
     
-    const sortedClosedShifts = closedShifts.sort((a, b) => {
+    const sortedClosedShifts = [...closedShifts].sort((a, b) => {
       const parseDate = (dStr) => {
          if (!dStr) return 0;
-         const [d, m, y] = dStr.split('.');
-         return new Date(y, m - 1, d).getTime();
+         const [day, mon, yr] = dStr.split('.');
+         return new Date(yr, mon - 1, day).getTime();
       };
       return parseDate(b.dateStr) - parseDate(a.dateStr);
     });
     
     return { hookahs, replacements, totalEarned, baseSalaryTotal, hookahPercentageTotal, shiftsCount, closedShifts: sortedClosedShifts };
-  })();
+  }, [myShifts, selectedMonth]);
 
   const handleLogin = async () => {
     if (pin.length !== 4) return;
@@ -219,6 +217,7 @@ const EmployeeApp = () => {
 
     if (partnerId) {
       const partner = employeesList.find(emp => emp.id === partnerId);
+      if (!partner) { throw new Error('Напарник не найден в списке сотрудников'); }
       const partnerBase = partner.customBaseSalary ? partner.customBaseSalary : outletSettings.partnerBaseSalary;
       
       const targetOwnerTotal = Math.ceil((c1 + c2) / 2);

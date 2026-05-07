@@ -12,13 +12,16 @@ const OutletSelector = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let unsubOutlets = null;
     const unsubAuth = onAuthStateChanged(auth, (user) => {
+      // Clean up previous outlets listener when auth state changes
+      if (unsubOutlets) { unsubOutlets(); unsubOutlets = null; }
       if (!user) {
         navigate('/admin/login');
         return;
       }
       const q = query(collection(db, 'outlets'), where('ownerUid', '==', user.uid));
-      const unsubOutlets = onSnapshot(q, (snap) => {
+      unsubOutlets = onSnapshot(q, (snap) => {
         const list = snap.docs.map(d => ({ id: d.id, ...d.data() }));
         setOutlets(list);
         setLoading(false);
@@ -26,9 +29,11 @@ const OutletSelector = () => {
           navigate('/' + list[0].slug + '/admin');
         }
       });
-      return () => unsubOutlets();
     });
-    return () => unsubAuth();
+    return () => {
+      unsubAuth();
+      if (unsubOutlets) unsubOutlets();
+    };
   }, [navigate]);
 
   if (loading) {
