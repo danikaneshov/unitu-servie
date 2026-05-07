@@ -227,8 +227,7 @@ const AdminDashboard = () => {
       }
 
       const ownerBase = emp.customBaseSalary ? emp.customBaseSalary : outletSettings.baseSalary;
-      const ic = outletSettings.itemCommission;
-      const pic = outletSettings.partnerItemCommission;
+      const ic = emp.customItemCommission ?? outletSettings.itemCommission;
 
       let partner = null;
       let c1 = Number(debugShift.hookahs) || 0;
@@ -239,6 +238,7 @@ const AdminDashboard = () => {
         partner = employees.find(e => e.id === debugShift.partnerId);
         if (!partner) throw new Error('Напарник не найден в списке сотрудников');
         const partnerBase = partner.customBaseSalary ? partner.customBaseSalary : outletSettings.partnerBaseSalary;
+        const partnerCommission = partner.customItemCommission ?? outletSettings.partnerItemCommission;
         
         let targetOwnerTotal = Math.ceil((c1 + c2) / 2);
         let ownerC1 = Math.ceil(c1 / 2);
@@ -247,7 +247,7 @@ const AdminDashboard = () => {
         let partnerC2 = c2 - ownerC2;
 
         let partnerTotalItems = partnerC1 + partnerC2;
-        let partnerEarned = partnerBase + (partnerC1 * pic) + (partnerC2 * pic);
+        let partnerEarned = partnerBase + (partnerC1 * partnerCommission) + (partnerC2 * partnerCommission);
 
         let ownerTotalItems = ownerC1 + ownerC2;
         let ownerEarned = ownerBase + (ownerC1 * ic) + (ownerC2 * ic);
@@ -258,7 +258,7 @@ const AdminDashboard = () => {
           dateStr: dStr, endTime: serverTimestamp(), photoUrl: uploadedImageUrl,
           items: { cocktail1: partnerC1, cocktail2: partnerC2 },
           totalItems: partnerTotalItems, earned: partnerEarned,
-          baseSalary: partnerBase, hookahPercentage: (partnerC1 * pic) + (partnerC2 * pic),
+          baseSalary: partnerBase, hookahPercentage: (partnerC1 * partnerCommission) + (partnerC2 * partnerCommission),
           shiftFraction: 0.5,
           status: 'closed'
         });
@@ -309,7 +309,11 @@ const AdminDashboard = () => {
       await addDoc(collection(db, 'employees'), {
         outletId: currentOutletId,
         name: newEmpName, pin: newEmpPin.toString(),
-        createdAt: serverTimestamp(), baseSalary: outletSettings.baseSalary, bonus1: outletSettings.itemCommission, bonus2: outletSettings.itemCommission
+        createdAt: serverTimestamp(),
+        baseSalary: outletSettings.baseSalary,
+        customItemCommission: outletSettings.itemCommission,
+        bonus1: outletSettings.itemCommission,
+        bonus2: outletSettings.itemCommission
       });
       setNewEmpName(''); setNewEmpPin('');
     } catch (error) { console.error(error); } finally { setIsAdding(false); }
@@ -607,7 +611,6 @@ const AdminDashboard = () => {
               <div className="flex items-center gap-3">
                 <div className="hidden md:flex items-center gap-4 text-xs font-bold">
                   <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-violet-500"></span>Пт/Сб/Праздник</span>
-                  <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-red-400"></span>Выходной (Пн)</span>
                   <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-primary"></span>Смена</span>
                 </div>
                 <div className="flex items-center gap-2 bg-white p-1 rounded-xl border border-slate-200 shadow-sm">
@@ -680,7 +683,6 @@ const AdminDashboard = () => {
                         const dateStr = `${String(day).padStart(2, '0')}.${targetMonthStr}`;
                         const shiftGroup = groupedShifts.find(g => g.dateStr === dateStr);
                         const dayOfWeek = (startOffset + day - 1) % 7; // 0=Mon ... 6=Sun
-                        const isMonday = dayOfWeek === 0;
                         const isFriday = dayOfWeek === 4;
                         const isSaturday = dayOfWeek === 5;
                         const holidayKey = `${month}.${String(day).padStart(2, '0')}`;
@@ -696,9 +698,7 @@ const AdminDashboard = () => {
                             className={`relative min-h-[80px] lg:min-h-[110px] p-1.5 lg:p-2.5 flex flex-col transition-all duration-200 ${
                               shiftGroup 
                                 ? 'bg-white cursor-pointer hover:bg-blue-50/50 group' 
-                                : isMonday && !shiftGroup
-                                  ? 'bg-red-50/30'
-                                  : isSpecialDay
+                                : isSpecialDay
                                     ? 'bg-violet-50/40'
                                     : 'bg-white'
                             }`}
@@ -713,9 +713,7 @@ const AdminDashboard = () => {
                                   ? 'bg-primary text-white shadow-md shadow-primary/30' 
                                   : shiftGroup 
                                     ? 'text-slate-800 group-hover:bg-primary/10 group-hover:text-primary'
-                                    : isMonday
-                                      ? 'text-red-300'
-                                      : isSpecialDay 
+                                    : isSpecialDay 
                                         ? 'text-violet-500'
                                         : 'text-slate-400'
                               }`}>{day}</div>
@@ -723,13 +721,6 @@ const AdminDashboard = () => {
                                 <span className="hidden lg:inline-block text-[8px] font-bold text-violet-500 bg-violet-100 px-1.5 py-0.5 rounded-full truncate max-w-[60px]" title={holidayName}>🎉</span>
                               )}
                             </div>
-
-                            {/* Monday watermark */}
-                            {isMonday && !shiftGroup && (
-                              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                                <span className="text-red-300/30 font-black text-[8px] lg:text-[10px] uppercase tracking-widest">Вых</span>
-                              </div>
-                            )}
 
                             {/* Holiday name on mobile too */}
                             {holidayName && !shiftGroup && (
@@ -1384,8 +1375,41 @@ const AdminDashboard = () => {
               </form>
             </div>
             <div className="col-span-1 lg:col-span-2 bg-white rounded-[32px] border border-slate-100 shadow-sm overflow-x-auto">
-              <table className="w-full min-w-[500px]"><thead><tr className="bg-slate-50"><th className="p-6 text-left text-xs font-black text-slate-400 uppercase">Мастер</th><th className="p-6 text-left text-xs font-black text-slate-400 uppercase">Доступ</th><th className="p-6"></th></tr></thead>
-              <tbody className="divide-y divide-slate-50">{employees.map(emp => (<tr key={emp.id}><td className="p-6 font-bold text-slate-900">{emp.name}</td><td className="p-6 font-mono text-slate-500">{emp.pin}</td><td className="p-6 text-right"><button onClick={()=>deleteDoc(doc(db,'employees',emp.id))} className="text-slate-300 hover:text-red-500"><Trash2 size={18}/></button></td></tr>))}</tbody></table>
+              <table className="w-full min-w-[720px]">
+                <thead>
+                  <tr className="bg-slate-50">
+                    <th className="p-6 text-left text-xs font-black text-slate-400 uppercase">Мастер</th>
+                    <th className="p-6 text-left text-xs font-black text-slate-400 uppercase">PIN</th>
+                    <th className="p-6 text-left text-xs font-black text-slate-400 uppercase">Ставка за кальян (₸)</th>
+                    <th className="p-6"></th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-50">
+                  {employees.map(emp => (
+                    <tr key={emp.id}>
+                      <td className="p-6 font-bold text-slate-900">{emp.name}</td>
+                      <td className="p-6 font-mono text-slate-500">{emp.pin}</td>
+                      <td className="p-6">
+                        <input
+                          type="number"
+                          min="0"
+                          value={emp.customItemCommission ?? outletSettings.itemCommission}
+                          onChange={async (e) => {
+                            const value = Number(e.target.value);
+                            await updateDoc(doc(db, 'employees', emp.id), { customItemCommission: value });
+                          }}
+                          className="w-44 p-3 bg-slate-50 rounded-xl border border-slate-200 font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                      </td>
+                      <td className="p-6 text-right">
+                        <button onClick={() => deleteDoc(doc(db, 'employees', emp.id))} className="text-slate-300 hover:text-red-500">
+                          <Trash2 size={18}/>
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
             )}

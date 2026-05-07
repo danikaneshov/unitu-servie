@@ -209,8 +209,7 @@ const EmployeeApp = () => {
     let myEarned;
     let myTotalItems;
     const myBase = employee.customBaseSalary ? employee.customBaseSalary : outletSettings.baseSalary;
-    const ic = outletSettings.itemCommission;
-    const pic = outletSettings.partnerItemCommission;
+    const ic = employee.customItemCommission ?? outletSettings.itemCommission;
 
     let ownerC1 = c1, ownerC2 = c2;
     let partnerC1, partnerC2;
@@ -219,6 +218,7 @@ const EmployeeApp = () => {
       const partner = employeesList.find(emp => emp.id === partnerId);
       if (!partner) { throw new Error('Напарник не найден в списке сотрудников'); }
       const partnerBase = partner.customBaseSalary ? partner.customBaseSalary : outletSettings.partnerBaseSalary;
+      const partnerCommission = partner.customItemCommission ?? outletSettings.partnerItemCommission;
       
       const targetOwnerTotal = Math.ceil((c1 + c2) / 2);
       ownerC1 = Math.ceil(c1 / 2);
@@ -238,8 +238,8 @@ const EmployeeApp = () => {
         dateStr: currentShift.dateStr,
         endTime: serverTimestamp(), photoUrl: imageUrl,
         items: { cocktail1: partnerC1, cocktail2: partnerC2 },
-        totalItems: partnerTotalItems, earned: partnerBase + (partnerC1 * pic) + (partnerC2 * pic),
-        baseSalary: partnerBase, hookahPercentage: (partnerC1 * pic) + (partnerC2 * pic),
+        totalItems: partnerTotalItems, earned: partnerBase + (partnerC1 * partnerCommission) + (partnerC2 * partnerCommission),
+        baseSalary: partnerBase, hookahPercentage: (partnerC1 * partnerCommission) + (partnerC2 * partnerCommission),
         shiftFraction: 0.5,
         status: 'closed'
       });
