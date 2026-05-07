@@ -12,7 +12,7 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Необходима ссылка на изображение' });
   }
 
-  const apiKey = process.env.GEMINI_API_KEY;
+  const apiKey = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
   if (!apiKey) {
     console.error('GEMINI_API_KEY not set!');
     return res.status(500).json({
