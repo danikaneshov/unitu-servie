@@ -30,6 +30,15 @@ const SuperAdminDashboard = () => {
   const [isCreatingUser, setIsCreatingUser] = useState(false);
   const [isCreatingOutlet, setIsCreatingOutlet] = useState(false);
   const [copiedSlug, setCopiedSlug] = useState(null);
+  const [toasts, setToasts] = useState([]);
+
+  const pushToast = (message, type = 'info') => {
+    const id = Date.now() + Math.random();
+    setToasts((prev) => [...prev, { id, message, type }]);
+    setTimeout(() => {
+      setToasts((prev) => prev.filter((t) => t.id !== id));
+    }, 2500);
+  };
 
   useEffect(() => {
     const u1 = onSnapshot(
@@ -79,9 +88,9 @@ const SuperAdminDashboard = () => {
         createdAt: new Date().toISOString()
       });
       setNewUser({ email: '', password: '', role: 'admin' });
-      alert('Пользователь создан');
+      pushToast('Пользователь создан', 'success');
     } catch (e) {
-      alert(`Ошибка: ${e.message}`);
+      pushToast(`Ошибка: ${e.message}`, 'error');
     } finally {
       setIsCreatingUser(false);
     }
@@ -89,9 +98,9 @@ const SuperAdminDashboard = () => {
 
   const handleCreateOutlet = async (ev) => {
     ev.preventDefault();
-    if (!newOutlet.ownerUid) return alert('Выберите владельца');
-    if (!/^[a-z0-9-]+$/.test(newOutlet.slug)) return alert('Slug: только латиница, цифры и дефис');
-    if (outlets.filter((o) => o.ownerUid === newOutlet.ownerUid).length >= 2) return alert('Лимит: 2 точки');
+    if (!newOutlet.ownerUid) return pushToast('Выберите владельца', 'error');
+    if (!/^[a-z0-9-]+$/.test(newOutlet.slug)) return pushToast('Slug: только латиница, цифры и дефис', 'error');
+    if (outlets.filter((o) => o.ownerUid === newOutlet.ownerUid).length >= 2) return pushToast('Лимит: 2 точки', 'error');
 
     setIsCreatingOutlet(true);
     try {
@@ -104,9 +113,9 @@ const SuperAdminDashboard = () => {
         settings: { baseSalary: 3000, partnerBaseSalary: 1500, itemCommission: 1500, partnerItemCommission: 1500 }
       });
       setNewOutlet({ name: '', slug: '', ownerUid: '', address: '' });
-      alert('Точка создана');
+      pushToast('Точка создана', 'success');
     } catch (e) {
-      alert(`Ошибка: ${e.message}`);
+      pushToast(`Ошибка: ${e.message}`, 'error');
     } finally {
       setIsCreatingOutlet(false);
     }
@@ -128,9 +137,9 @@ const SuperAdminDashboard = () => {
           })
         );
       }
-      alert('Миграция завершена');
+      pushToast('Миграция завершена', 'success');
     } catch (e) {
-      alert(`Ошибка: ${e.message}`);
+      pushToast(`Ошибка: ${e.message}`, 'error');
     }
   };
 
@@ -164,6 +173,23 @@ const SuperAdminDashboard = () => {
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] text-slate-700">
+      <div className="fixed top-4 right-4 z-[60] space-y-2">
+        {toasts.map((t) => (
+          <div
+            key={t.id}
+            className={`px-4 py-3 rounded-xl shadow-lg text-sm font-bold border ${
+              t.type === 'success'
+                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                : t.type === 'error'
+                  ? 'bg-red-50 text-red-700 border-red-200'
+                  : 'bg-slate-50 text-slate-700 border-slate-200'
+            }`}
+          >
+            {t.message}
+          </div>
+        ))}
+      </div>
+
       <div className="max-w-7xl mx-auto px-4 py-6 lg:px-8 lg:py-8">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
           <div>
@@ -332,6 +358,7 @@ const SuperAdminDashboard = () => {
                         onClick={() => {
                           navigator.clipboard.writeText(url);
                           setCopiedSlug(o.id);
+                          pushToast('Ссылка скопирована', 'success');
                           setTimeout(() => setCopiedSlug(null), 1500);
                         }}
                       >

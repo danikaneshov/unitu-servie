@@ -34,6 +34,9 @@ const AdminDashboard = () => {
   const [newEmpName, setNewEmpName] = useState('');
   const [newEmpPin, setNewEmpPin] = useState('');
   const [isAdding, setIsAdding] = useState(false);
+  const [commissionDrafts, setCommissionDrafts] = useState({});
+  const [savingCommissionEmpId, setSavingCommissionEmpId] = useState(null);
+  const commissionSaveTimersRef = useRef({});
 
   const [selectedEmpReport, setSelectedEmpReport] = useState(null);
 
@@ -299,6 +302,32 @@ const AdminDashboard = () => {
   };
 
   const generatePin = () => setNewEmpPin(Math.floor(1000 + Math.random() * 9000).toString());
+
+  const handleCommissionDraftChange = (empId, value) => {
+    setCommissionDrafts((prev) => ({ ...prev, [empId]: value }));
+  };
+
+  const queueCommissionSave = (empId, value) => {
+    if (commissionSaveTimersRef.current[empId]) {
+      clearTimeout(commissionSaveTimersRef.current[empId]);
+    }
+    commissionSaveTimersRef.current[empId] = setTimeout(async () => {
+      try {
+        setSavingCommissionEmpId(empId);
+        await updateDoc(doc(db, 'employees', empId), { customItemCommission: value });
+      } catch (err) {
+        alert('Ошибка сохранения ставки: ' + err.message);
+      } finally {
+        setSavingCommissionEmpId(null);
+      }
+    }, 450);
+  };
+
+  useEffect(() => {
+    return () => {
+      Object.values(commissionSaveTimersRef.current).forEach((timerId) => clearTimeout(timerId));
+    };
+  }, []);
 
   const handleAddEmployee = async (e) => {
     e.preventDefault();
@@ -1374,7 +1403,48 @@ const AdminDashboard = () => {
                 <button type="submit" disabled={isAdding || !newEmpName || newEmpPin.length !== 4} className="w-full p-4 bg-blue-600 text-white rounded-2xl font-bold disabled:bg-blue-300">Создать аккаунт</button>
               </form>
             </div>
-            <div className="col-span-1 lg:col-span-2 bg-white rounded-[32px] border border-slate-100 shadow-sm overflow-x-auto">
+            <div className="col-span-1 lg:col-span-2 bg-white rounded-[32px] border border-slate-100 shadow-sm overflow-hidden">
+              <div className="lg:hidden divide-y divide-slate-100">
+                {employees.map((emp) => {
+                  const persistedValue = emp.customItemCommission ?? outletSettings.itemCommission;
+                  const draftRaw = commissionDrafts[emp.id];
+                  const inputValue = draftRaw ?? String(persistedValue);
+                  return (
+                    <div key={emp.id} className="p-4">
+                      <div className="flex items-start justify-between gap-3 mb-3">
+                        <div>
+                          <p className="font-bold text-slate-900">{emp.name}</p>
+                          <p className="text-xs text-slate-400 font-mono">PIN: {emp.pin}</p>
+                        </div>
+                        <button onClick={() => deleteDoc(doc(db, 'employees', emp.id))} className="text-slate-300 hover:text-red-500">
+                          <Trash2 size={18}/>
+                        </button>
+                      </div>
+                      <label className="block text-[10px] font-black text-slate-400 uppercase mb-2">Ставка за кальян (₸)</label>
+                      <input
+                        type="number"
+                        min="0"
+                        value={inputValue}
+                        onChange={(e) => handleCommissionDraftChange(emp.id, e.target.value)}
+                        onBlur={() => {
+                          const parsed = Number(inputValue || 0);
+                          if (parsed === persistedValue) return;
+                          const shouldSave = window.confirm(`Сохранить ставку ${parsed} ₸ для ${emp.name}?`);
+                          if (!shouldSave) {
+                            setCommissionDrafts((prev) => ({ ...prev, [emp.id]: String(persistedValue) }));
+                            return;
+                          }
+                          queueCommissionSave(emp.id, parsed);
+                        }}
+                        className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200 font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                      {savingCommissionEmpId === emp.id && <p className="text-[10px] text-blue-500 font-bold mt-2">Сохранение...</p>}
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="hidden lg:block overflow-x-auto">
               <table className="w-full min-w-[720px]">
                 <thead>
                   <tr className="bg-slate-50">
@@ -1390,16 +1460,33 @@ const AdminDashboard = () => {
                       <td className="p-6 font-bold text-slate-900">{emp.name}</td>
                       <td className="p-6 font-mono text-slate-500">{emp.pin}</td>
                       <td className="p-6">
+                        {(() => {
+                          const persistedValue = emp.customItemCommission ?? outletSettings.itemCommission;
+                          const draftRaw = commissionDrafts[emp.id];
+                          const inputValue = draftRaw ?? String(persistedValue);
+                          return (
                         <input
                           type="number"
                           min="0"
-                          value={emp.customItemCommission ?? outletSettings.itemCommission}
-                          onChange={async (e) => {
-                            const value = Number(e.target.value);
-                            await updateDoc(doc(db, 'employees', emp.id), { customItemCommission: value });
+                          value={inputValue}
+                          onChange={(e) => {
+                            handleCommissionDraftChange(emp.id, e.target.value);
+                          }}
+                          onBlur={() => {
+                            const parsed = Number(inputValue || 0);
+                            if (parsed === persistedValue) return;
+                            const shouldSave = window.confirm(`Сохранить ставку ${parsed} ₸ для ${emp.name}?`);
+                            if (!shouldSave) {
+                              setCommissionDrafts((prev) => ({ ...prev, [emp.id]: String(persistedValue) }));
+                              return;
+                            }
+                            queueCommissionSave(emp.id, parsed);
                           }}
                           className="w-44 p-3 bg-slate-50 rounded-xl border border-slate-200 font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
                         />
+                          );
+                        })()}
+                        {savingCommissionEmpId === emp.id && <p className="text-[10px] text-blue-500 font-bold mt-1">Сохранение...</p>}
                       </td>
                       <td className="p-6 text-right">
                         <button onClick={() => deleteDoc(doc(db, 'employees', emp.id))} className="text-slate-300 hover:text-red-500">
@@ -1410,6 +1497,7 @@ const AdminDashboard = () => {
                   ))}
                 </tbody>
               </table>
+              </div>
             </div>
           </div>
             )}
