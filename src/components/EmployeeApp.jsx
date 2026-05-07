@@ -60,6 +60,25 @@ const EmployeeApp = () => {
   const [modal, setModal] = useState({ isOpen: false, type: '', title: '', message: '', data: null });
   const [selectedHistoryShift, setSelectedHistoryShift] = useState(null);
 
+  useEffect(() => {
+    const prevBodyOverflow = document.body.style.overflow;
+    const prevHtmlOverflow = document.documentElement.style.overflow;
+    const prevBodyOverscroll = document.body.style.overscrollBehavior;
+    const prevHtmlOverscroll = document.documentElement.style.overscrollBehavior;
+
+    document.body.style.overflow = 'hidden';
+    document.documentElement.style.overflow = 'hidden';
+    document.body.style.overscrollBehavior = 'none';
+    document.documentElement.style.overscrollBehavior = 'none';
+
+    return () => {
+      document.body.style.overflow = prevBodyOverflow;
+      document.documentElement.style.overflow = prevHtmlOverflow;
+      document.body.style.overscrollBehavior = prevBodyOverscroll;
+      document.documentElement.style.overscrollBehavior = prevHtmlOverscroll;
+    };
+  }, []);
+
 
 
   useEffect(() => {
@@ -440,7 +459,7 @@ const EmployeeApp = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col max-w-md mx-auto shadow-xl relative overflow-hidden no-select">
+    <div className="h-[100dvh] max-h-[100dvh] bg-gray-50 flex flex-col max-w-md w-full mx-auto shadow-xl relative overflow-hidden no-select overscroll-none">
       
       {/* МОДАЛЬНЫЕ ОКНА */}
       {selectedHistoryShift && (
@@ -529,7 +548,7 @@ const EmployeeApp = () => {
         <button onClick={() => {setEmployee(null); localStorage.clear();}} className="p-2 text-gray-300 hover:text-red-500"><LogOut/></button>
       </div>
 
-      <div className="flex-1 p-6 flex flex-col relative overflow-auto">
+      <div className="flex-1 p-6 flex flex-col relative overflow-y-auto overscroll-contain">
         
         {activeTab === 'shift' && (
           <div className="flex-1 flex flex-col w-full h-full animate-in fade-in duration-300">
