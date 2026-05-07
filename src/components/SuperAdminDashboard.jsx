@@ -1,10 +1,8 @@
 ﻿import { useState, useEffect, createElement } from "react";
 import { collection, onSnapshot, addDoc, setDoc, doc, getDocs, updateDoc } from "firebase/firestore";
-import { db, auth } from "../firebase";
+import { db, auth, FIREBASE_API_KEY } from "../firebase";
 import { signOut } from "firebase/auth";
 import { LogOut, Database, Plus, Shield, Store, Users, Copy, Check, ExternalLink, UserPlus, Building } from "lucide-react";
-
-const API_KEY = "AIzaSyDH1sVswERvfGMgYDnYA-elfJanHETHV_4";
 
 var StatCard = function(p) {
   return createElement("div", { className: "bg-white/5 border border-white/10 rounded-2xl p-5 flex items-center gap-4 hover:bg-white/[0.07] transition-all" },
@@ -47,7 +45,7 @@ var SuperAdminDashboard = function() {
   var handleCreateUser = async function(ev) {
     ev.preventDefault(); setIsCreatingUser(true);
     try {
-      var r = await fetch("https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=" + API_KEY, {
+      var r = await fetch("https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=" + FIREBASE_API_KEY, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: newUser.email, password: newUser.password, returnSecureToken: false })
       });
@@ -86,10 +84,14 @@ var SuperAdminDashboard = function() {
     try {
       var cols = ["employees", "sales", "inventory_movements", "inventory_templates"];
       for (var i = 0; i < cols.length; i++) {
-        var snap = await getDocs(collection(db, cols[i]));
-        snap.docs.forEach(async function(ds) {
-          if (!ds.data().outletId) await updateDoc(doc(db, cols[i], ds.id), { outletId: oid });
-        });
+        var colName = cols[i];
+        var snap = await getDocs(collection(db, colName));
+        await Promise.all(
+          snap.docs.map(function(ds) {
+            if (ds.data().outletId) return Promise.resolve();
+            return updateDoc(doc(db, colName, ds.id), { outletId: oid });
+          })
+        );
       }
       alert("\u041C\u0438\u0433\u0440\u0430\u0446\u0438\u044F \u0437\u0430\u0432\u0435\u0440\u0448\u0435\u043D\u0430");
     } catch (e) { alert("\u041E\u0448\u0438\u0431\u043A\u0430: " + e.message); }

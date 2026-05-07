@@ -1,0 +1,125 @@
+# Аудит и исправление багов, костылей и логических проблем
+
+Полный аудит кодовой базы выявил **13 проблем** — от критических runtime-багов до мёртвого кода и утечек памяти.
+
+## Найденные проблемы
+
+### 🔴 Критические баги (ломают работу приложения)
+
+#### 1. `api/analyze.js` — Сломанный Gemini API
+- **Строка 15**: `GoogleGenerativeAI` используется, но **не импортирован** — будет `ReferenceError`.
+- Переменная названа `apiKey`, но в неё кладётся `new GoogleGenerativeAI(...)` — это **объект клиента**, не ключ.
+- **Строка 16**: Проверка `if (!apiKey)` **никогда не сработает**, потому что `new ...()` всегда вернёт объект (truthy).
+- В `analyze-handler.js` этот объект передаётся как `apiKey` и оборачивается **ещё раз** через `new GoogleGenerativeAI(apiKey)` → двойная обёртка, ошибка в runtime.
+
+#### 2. `OutletSelector.jsx` — Утечка Firestore-листенера
+- **Строка 29**: `return () => unsubOutlets()` — это возврат из коллбэка `onAuthStateChanged`, а **не из `useEffect`**. Firestore-подписка `onSnapshot` **никогда не отписывается** при размонтировании.
+
+#### 3. `EmployeeApp.jsx:222` — Crash при выборе напарника
+- `partner = employeesList.find(...)` может вернуть `undefined`, но дальше без проверки идёт `partner.customBaseSalary` → потенциальный `TypeError`.
+- Та же проблема в `AdminDashboard.jsx:244` в дебаг-панели.
+
+---
+
+### 🟡 Баги логики (неправильное поведение)
+
+#### 4. `SuperAdminDashboard.jsx:90` — Миграция не ждёт завершения
+- `snap.docs.forEach(async function(ds) { ... })` — `forEach` не ждёт промисов. Обновления улетают fire-and-forget, `alert('Миграция завершена')` показывается мгновенно, до реального завершения.
+
+#### 5. `AdminDashboard.jsx:1041, 1324` — Дублированное свойство
+- `{ outletId: currentOutletId, outletId: currentOutletId, ... }` — копипаста, второе свойство перезаписывает первое. Не критично, но грязно.
+
+#### 6. `useDynamicFavicon.js:25` — Мёртвый код
+- Ищет элемент `#dynamic-apple-icon`, но в `index.html` у apple-touch-icon нет такого `id`. Код **никогда не работает**.
+
+---
+
+### 🟢 Костыли и мёртвый код
+
+#### 7. `AdminDashboard.jsx:360` — Мёртвая переменная `tamerlanEarned`
+- `const tamerlanEarned = 0` — захардкожена в 0, используется в `profitWithoutTamerlan`, но реально ничего не делает. Это мусор из ранней разработки.
+
+#### 8. `AdminDashboard.jsx:383-388` — Вычисления без мемоизации
+- `closedSystemShifts`, `totalSystemEarned`, `globalHookahs` и т.д. пересчитываются на **каждый рендер**, хотя зависят только от `allShifts` и `ownerProfits`.
+- Из-за этого `chartData` (useMemo на строке 405) зависит от нестабильной ссылки `closedSystemShifts` и **тоже пересчитывается каждый раз**, обнуляя весь смысл useMemo.
+
+#### 9. `EmployeeApp.jsx:115-159` — IIFE вместо useMemo
+- `availableMonths` и `myStats` вычисляются как `(() => { ... })()` — анонимные IIFE на каждый рендер. Должны быть `useMemo`.
+
+#### 10. `SuperAdminDashboard.jsx:7` — Дублирование API-ключа
+- Firebase API key захардкожен второй раз (первый — в `firebase.js`). При смене ключа нужно менять в двух местах.
+
+#### 11. Затенение переменных (variable shadowing)
+- `EmployeeApp.jsx:77, 86, 108, 109`: параметр `doc` в `.map(doc => ...)` затеняет импорт `doc` из Firestore.
+- То же в `AdminDashboard.jsx:158, 164`.
+
+#### 12. `formatMoney` дублируется
+- Одинаковая функция `formatMoney` скопирована в двух файлах: `EmployeeApp.jsx:15` и `AdminDashboard.jsx:13`.
+
+#### 13. Неиспользуемые импорты
+- `AdminDashboard.jsx:3`: `Image` импортирован из lucide-react, но нигде не используется.
+- `EmployeeApp.jsx:1`: Несколько иконок могут быть неиспользуемыми.
+
+---
+
+## Proposed Changes
+
+### API Layer
+
+#### [MODIFY] [analyze.js](file:///Users/daniyaraneshov/Desktop/crm-tamer/test-new-ui-ux/crm-tamerr/api/analyze.js)
+- Убрать несуществующий `new GoogleGenerativeAI(...)` — просто передавать сырой ключ `process.env.GEMINI_API_KEY`
+- Добавить проверку ключа **до** вызова конструктора
+- Передавать в `analyzeImage` строку ключа, а не объект
+
+#### [MODIFY] [analyze-handler.js](file:///Users/daniyaraneshov/Desktop/crm-tamer/test-new-ui-ux/crm-tamerr/api/analyze-handler.js)
+- Параметр переименовать с `apiKey` на `geminiApiKey` для ясности
+
+---
+
+### Components
+
+#### [MODIFY] [OutletSelector.jsx](file:///Users/daniyaraneshov/Desktop/crm-tamer/test-new-ui-ux/crm-tamerr/src/components/OutletSelector.jsx)
+- Исправить утечку: хранить `unsubOutlets` в ref и отписываться в cleanup `useEffect`
+
+#### [MODIFY] [EmployeeApp.jsx](file:///Users/daniyaraneshov/Desktop/crm-tamer/test-new-ui-ux/crm-tamerr/src/components/EmployeeApp.jsx)
+- Добавить null-check для `partner` при закрытии смены
+- Заменить IIFE `availableMonths` и `myStats` на `useMemo`
+- Исправить затенение переменных (`doc` → `d`, `d` → `s`)
+
+#### [MODIFY] [AdminDashboard.jsx](file:///Users/daniyaraneshov/Desktop/crm-tamer/test-new-ui-ux/crm-tamerr/src/components/AdminDashboard.jsx)
+- Убрать дублированное свойство `outletId` (строки 1041, 1324)
+- Удалить мёртвую переменную `tamerlanEarned` и связанный `profitWithoutTamerlan`
+- Обернуть `closedSystemShifts`, `totalSystemEarned` и т.д. в `useMemo`
+- Добавить null-check для `partner` в debug-панели
+- Исправить затенение переменных
+- Убрать неиспользуемый импорт `Image`
+
+#### [MODIFY] [SuperAdminDashboard.jsx](file:///Users/daniyaraneshov/Desktop/crm-tamer/test-new-ui-ux/crm-tamerr/src/components/SuperAdminDashboard.jsx)
+- Заменить `forEach(async ...)` на `Promise.all(map(...))` в миграции
+- Убрать дублированный API_KEY, импортировать из `firebase.js`
+
+#### [MODIFY] [useDynamicFavicon.js](file:///Users/daniyaraneshov/Desktop/crm-tamer/test-new-ui-ux/crm-tamerr/src/hooks/useDynamicFavicon.js)
+- Убрать мёртвый блок с `dynamic-apple-icon`
+
+---
+
+### Shared Utils
+
+#### [NEW] [utils/formatMoney.js](file:///Users/daniyaraneshov/Desktop/crm-tamer/test-new-ui-ux/crm-tamerr/src/utils/formatMoney.js)
+- Вынести `formatMoney` в общий модуль и импортировать в обоих файлах
+
+---
+
+## Verification Plan
+
+### Automated Tests
+```bash
+npm run build
+```
+Сборка должна пройти без ошибок и предупреждений.
+
+### Manual Verification
+- Проверить `/api/analyze` endpoint (фото-чек)
+- Проверить переключение точек в OutletSelector
+- Проверить закрытие смены с напарником
+- Проверить миграцию в SuperAdmin

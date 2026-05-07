@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Loader2, LogOut, Users, LayoutDashboard, Key, Trash2, Image, Settings, Menu, X, Percent, Wallet, Database, AlertTriangle, Clock, Banknote, CalendarDays, Calendar as CalendarIcon, Package, ArrowDownToLine, ArrowUpFromLine, Calculator, Ruler, ShoppingCart, CheckCircle2, Plus } from 'lucide-react';
+import { Loader2, LogOut, Users, LayoutDashboard, Key, Trash2, Settings, Menu, X, Percent, Wallet, Database, AlertTriangle, Clock, Banknote, CalendarDays, Calendar as CalendarIcon, Package, ArrowDownToLine, ArrowUpFromLine, Calculator, Ruler, ShoppingCart, CheckCircle2, Plus } from 'lucide-react';
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { signOut } from 'firebase/auth';
 import { collection, addDoc, onSnapshot, query, orderBy, deleteDoc, doc, serverTimestamp, setDoc, getDocs, where, updateDoc } from 'firebase/firestore';
@@ -9,11 +9,7 @@ import * as XLSX from 'xlsx';
 import { Card } from './ui/Card';
 import { Button } from './ui/Button';
 import { Badge } from './ui/Badge';
-
-const formatMoney = (amount) => {
-  if (amount === undefined || amount === null) return 0;
-  return amount.toString().replace(/\B(?=(\d{3})+(?!\d))/g, " ");
-};
+import { formatMoney } from '../utils/formatMoney';
 
 const AdminDashboard = () => {
   const [currentUserUid, setCurrentUserUid] = useState(null);
@@ -155,13 +151,13 @@ const AdminDashboard = () => {
     if (!currentOutletId) return;
 
     const unsubEmp = onSnapshot(query(collection(db, 'employees'), where('outletId', '==', currentOutletId)), (snap) => {
-      const emps = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const emps = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       emps.sort((a,b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
       setEmployees(emps);
     });
     
     const unsubSales = onSnapshot(query(collection(db, 'sales'), where('outletId', '==', currentOutletId)), (snap) => {
-      const shifts = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const shifts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       shifts.sort((a, b) => {
         if (a.status === 'open' && b.status !== 'open') return -1;
         if (a.status !== 'open' && b.status === 'open') return 1;
@@ -241,6 +237,7 @@ const AdminDashboard = () => {
 
       if (debugShift.partnerId) {
         partner = employees.find(e => e.id === debugShift.partnerId);
+        if (!partner) throw new Error('Напарник не найден в списке сотрудников');
         const partnerBase = partner.customBaseSalary ? partner.customBaseSalary : outletSettings.partnerBaseSalary;
         
         let targetOwnerTotal = Math.ceil((c1 + c2) / 2);
@@ -357,8 +354,6 @@ const AdminDashboard = () => {
     const replacements = filteredShifts.reduce((a, b) => a + (b.items?.cocktail2 || 0), 0);
     const ownerProfit = (hookahs * ownerProfits.hookah) + (replacements * ownerProfits.replacement);
     
-    const tamerlanEarned = 0;
-    
     const purchases = invMovements
       .filter(m => m.type === 'in' && (isAll || (m.dateStr && m.dateStr.endsWith(`.${selectedMonth}`))))
       .reduce((a, b) => a + (b.cost || 0), 0);
@@ -373,18 +368,27 @@ const AdminDashboard = () => {
       ownerProfit,
       hookahProfit,
       replacementProfit,
-      tamerlanEarned,
       purchases,
-      netProfit: ownerProfit - earned,
-      profitWithoutTamerlan: ownerProfit - (earned - tamerlanEarned)
+      netProfit: ownerProfit - earned
     };
   }, [allShifts, selectedMonth, ownerProfits, invMovements]);
 
-  // Старые переменные для совместимости с дашбордом (глобальные)
-  const closedSystemShifts = allShifts.filter(s => s.status === 'closed');
-  const totalSystemEarned = closedSystemShifts.reduce((a,b) => a + (b.earned || 0), 0);
-  const globalHookahs = closedSystemShifts.reduce((a,b) => a + (b.items?.cocktail1 || 0), 0);
-  const globalReplacements = closedSystemShifts.reduce((a,b) => a + (b.items?.cocktail2 || 0), 0);
+  const closedSystemShifts = useMemo(
+    () => allShifts.filter(s => s.status === 'closed'),
+    [allShifts]
+  );
+  const totalSystemEarned = useMemo(
+    () => closedSystemShifts.reduce((a, b) => a + (b.earned || 0), 0),
+    [closedSystemShifts]
+  );
+  const globalHookahs = useMemo(
+    () => closedSystemShifts.reduce((a, b) => a + (b.items?.cocktail1 || 0), 0),
+    [closedSystemShifts]
+  );
+  const globalReplacements = useMemo(
+    () => closedSystemShifts.reduce((a, b) => a + (b.items?.cocktail2 || 0), 0),
+    [closedSystemShifts]
+  );
   const globalOwnerProfit = (globalHookahs * ownerProfits.hookah) + (globalReplacements * ownerProfits.replacement);
   
   const replacementRate = globalHookahs > 0 ? ((globalReplacements / globalHookahs) * 100).toFixed(1) : 0;
@@ -1038,7 +1042,7 @@ const AdminDashboard = () => {
             setIsSavingInv(true);
             try {
               const now = new Date();
-              await addDoc(collection(db, 'inventory_movements'), { outletId: currentOutletId, outletId: currentOutletId,
+              await addDoc(collection(db, 'inventory_movements'), { outletId: currentOutletId,
                 type: invForm.type, item: invForm.item,
                 amount: Number(invForm.amount), 
                 cost: invForm.type === 'in' ? Number(invForm.cost || 0) : 0,
@@ -1321,7 +1325,7 @@ const AdminDashboard = () => {
               <div className="space-y-6">
                 <h1 className="text-2xl font-bold text-slate-800">Списание</h1>
                 <div className="bg-white p-8 rounded-[32px] border border-slate-100 shadow-sm max-w-xl">
-                  <form onSubmit={async (e) => { e.preventDefault(); if (!invForm.amount || Number(invForm.amount) <= 0) return alert('Укажите количество'); setIsSavingInv(true); try { const now = new Date(); await addDoc(collection(db, 'inventory_movements'), { outletId: currentOutletId, outletId: currentOutletId, type: 'writeoff', item: invForm.item, amount: Number(invForm.amount), cost: 0, note: invForm.note || '', dateStr: `${String(now.getDate()).padStart(2,'0')}.${String(now.getMonth()+1).padStart(2,'0')}.${now.getFullYear()}`, createdAt: serverTimestamp() }); setInvForm({ type: 'in', item: 'coal', amount: '', cost: '', note: '', templateId: '' }); } catch (err) { alert('Ошибка: ' + err.message); } finally { setIsSavingInv(false); } }} className="space-y-5">
+                  <form onSubmit={async (e) => { e.preventDefault(); if (!invForm.amount || Number(invForm.amount) <= 0) return alert('Укажите количество'); setIsSavingInv(true); try { const now = new Date(); await addDoc(collection(db, 'inventory_movements'), { outletId: currentOutletId, type: 'writeoff', item: invForm.item, amount: Number(invForm.amount), cost: 0, note: invForm.note || '', dateStr: `${String(now.getDate()).padStart(2,'0')}.${String(now.getMonth()+1).padStart(2,'0')}.${now.getFullYear()}`, createdAt: serverTimestamp() }); setInvForm({ type: 'in', item: 'coal', amount: '', cost: '', note: '', templateId: '' }); } catch (err) { alert('Ошибка: ' + err.message); } finally { setIsSavingInv(false); } }} className="space-y-5">
                     <div><label className="block text-xs font-bold text-slate-400 uppercase mb-2">Товар</label><select value={invForm.item} onChange={e => setInvForm({...invForm, item: e.target.value})} className="w-full p-4 bg-slate-50 rounded-2xl border-none font-bold text-lg text-slate-800"><option value="coal">🔥 Уголь (шт)</option><option value="tobacco">🍃 Табак (г)</option><option value="mouthpiece">💠 Мундштуки (шт)</option></select></div>
                     <div><label className="block text-xs font-bold text-slate-400 uppercase mb-2">Количество</label><input type="number" min="1" value={invForm.amount} onChange={e => setInvForm({...invForm, amount: e.target.value})} placeholder="Сколько списать" className="w-full p-4 bg-slate-50 rounded-2xl border-none font-bold text-lg text-slate-800" required /></div>
                     <div><label className="block text-xs font-bold text-slate-400 uppercase mb-2">Причина</label><input type="text" value={invForm.note} onChange={e => setInvForm({...invForm, note: e.target.value})} placeholder="Например: отправил на вторую точку" className="w-full p-4 bg-slate-50 rounded-2xl border-none font-bold text-slate-800" /></div>

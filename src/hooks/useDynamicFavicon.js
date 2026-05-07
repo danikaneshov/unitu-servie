@@ -2,8 +2,7 @@ import { useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 
 /**
- * Динамически меняет favicon, apple-touch-icon и manifest
- * в зависимости от текущего роута.
+ * Динамически меняет favicon и manifest в зависимости от текущего роута.
  * /admin* → иконки и манифест админа
  * всё остальное → иконки и манифест клиента
  */
@@ -19,12 +18,6 @@ const useDynamicFavicon = () => {
     const favicon = document.getElementById('dynamic-favicon');
     if (favicon) {
       favicon.href = `/${iconFolder}/icon-192x192.png`;
-    }
-
-    // Apple Touch Icon (для iPhone «Добавить на экран Домой»)
-    const appleIcon = document.getElementById('dynamic-apple-icon');
-    if (appleIcon) {
-      appleIcon.href = `/${iconFolder}/icon-192x192.png`;
     }
 
     // Manifest (для PWA иконок)
