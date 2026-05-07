@@ -1,345 +1,283 @@
-import React, { useState, useEffect } from 'react';
-import { collection, onSnapshot, addDoc, setDoc, doc, query, orderBy, getDocs, updateDoc } from 'firebase/firestore';
-import { db, auth } from '../firebase';
-import { signOut } from 'firebase/auth';
+﻿import { useState, useEffect, createElement } from "react";
+import { collection, onSnapshot, addDoc, setDoc, doc, getDocs, updateDoc } from "firebase/firestore";
+import { db, auth } from "../firebase";
+import { signOut } from "firebase/auth";
+import { LogOut, Database, Plus, Shield, Store, Users, Copy, Check, ExternalLink, UserPlus, Building } from "lucide-react";
 
-// Firebase Auth REST API key for creating users without logging out current user
-const FIREBASE_API_KEY = "AIzaSyDH1sVswERvfGMgYDnYA-elfJanHETHV_4";
+const API_KEY = "AIzaSyDH1sVswERvfGMgYDnYA-elfJanHETHV_4";
 
-const SuperAdminDashboard = () => {
-  const [users, setUsers] = useState([]);
-  const [outlets, setOutlets] = useState([]);
-  const [loading, setLoading] = useState(true);
+var StatCard = function(p) {
+  return createElement("div", { className: "bg-white/5 border border-white/10 rounded-2xl p-5 flex items-center gap-4 hover:bg-white/[0.07] transition-all" },
+    createElement("div", { className: "w-12 h-12 rounded-xl flex items-center justify-center " + p.color }, createElement(p.icon, { size: 22 })),
+    createElement("div", null,
+      createElement("p", { className: "text-xs text-slate-400 font-bold uppercase tracking-wider" }, p.label),
+      createElement("p", { className: "text-2xl font-black text-white" }, p.value)
+    )
+  );
+};
 
-  // Forms
-  const [newUser, setNewUser] = useState({ email: '', password: '', role: 'admin' });
-  const [newOutlet, setNewOutlet] = useState({ name: '', slug: '', ownerUid: '', address: '' });
-  const [isCreatingUser, setIsCreatingUser] = useState(false);
-  const [isCreatingOutlet, setIsCreatingOutlet] = useState(false);
+var SuperAdminDashboard = function() {
+  var _users = useState([]); var users = _users[0]; var setUsers = _users[1];
+  var _outlets = useState([]); var outlets = _outlets[0]; var setOutlets = _outlets[1];
+  var _loading = useState(true); var loading = _loading[0]; var setLoading = _loading[1];
+  var _error = useState(null); var error = _error[0]; var setError = _error[1];
+  var _section = useState("overview"); var activeSection = _section[0]; var setActiveSection = _section[1];
+  var _newUser = useState({ email: "", password: "", role: "admin" }); var newUser = _newUser[0]; var setNewUser = _newUser[1];
+  var _newOutlet = useState({ name: "", slug: "", ownerUid: "", address: "" }); var newOutlet = _newOutlet[0]; var setNewOutlet = _newOutlet[1];
+  var _creatingUser = useState(false); var isCreatingUser = _creatingUser[0]; var setIsCreatingUser = _creatingUser[1];
+  var _creatingOutlet = useState(false); var isCreatingOutlet = _creatingOutlet[0]; var setIsCreatingOutlet = _creatingOutlet[1];
+  var _copied = useState(null); var copiedSlug = _copied[0]; var setCopiedSlug = _copied[1];
 
-  useEffect(() => {
-    const unsubUsers = onSnapshot(collection(db, 'users'), (snap) => {
-      setUsers(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    });
-
-    const unsubOutlets = onSnapshot(collection(db, 'outlets'), (snap) => {
-      setOutlets(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-      setLoading(false);
-    });
-
-    return () => { unsubUsers(); unsubOutlets(); };
+  useEffect(function() {
+    var u1 = onSnapshot(collection(db, "users"),
+      function(s) { setUsers(s.docs.map(function(d) { return { id: d.id, ...d.data() }; })); },
+      function(e) { console.error(e); setError("\u041E\u0448\u0438\u0431\u043A\u0430 \u0437\u0430\u0433\u0440\u0443\u0437\u043A\u0438: " + e.message); }
+    );
+    var u2 = onSnapshot(collection(db, "outlets"),
+      function(s) { setOutlets(s.docs.map(function(d) { return { id: d.id, ...d.data() }; })); setLoading(false); },
+      function(e) { console.error(e); setError("\u041E\u0448\u0438\u0431\u043A\u0430 \u0437\u0430\u0433\u0440\u0443\u0437\u043A\u0438: " + e.message); }
+    );
+    return function() { u1(); u2(); };
   }, []);
 
-  const handleCreateUser = async (e) => {
-    e.preventDefault();
-    setIsCreatingUser(true);
+  useEffect(function() {
+    if (loading) { var t = setTimeout(function() { setLoading(false); }, 5000); return function() { clearTimeout(t); }; }
+  }, [loading]);
+
+  var handleCreateUser = async function(ev) {
+    ev.preventDefault(); setIsCreatingUser(true);
     try {
-      // 1. Create auth user via REST API to avoid logging out superadmin
-      const response = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${FIREBASE_API_KEY}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: newUser.email,
-          password: newUser.password,
-          returnSecureToken: false
-        })
+      var r = await fetch("https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=" + API_KEY, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: newUser.email, password: newUser.password, returnSecureToken: false })
       });
-      const data = await response.json();
-      
-      if (!response.ok) {
-        throw new Error(data.error.message || 'Error creating user in Firebase Auth');
-      }
-
-      const uid = data.localId;
-
-      // 2. Create user document in Firestore
-      await setDoc(doc(db, 'users', uid), {
-        uid: uid,
-        email: newUser.email,
-        role: newUser.role,
-        createdAt: new Date().toISOString()
+      var d = await r.json();
+      if (!r.ok) throw new Error(d.error.message || "\u041E\u0448\u0438\u0431\u043A\u0430");
+      await setDoc(doc(db, "users", d.localId), {
+        uid: d.localId, email: newUser.email, role: newUser.role, createdAt: new Date().toISOString()
       });
-
-      setNewUser({ email: '', password: '', role: 'admin' });
-      alert('Пользователь успешно создан!');
-    } catch (err) {
-      alert('Ошибка: ' + err.message);
-    } finally {
-      setIsCreatingUser(false);
-    }
+      setNewUser({ email: "", password: "", role: "admin" });
+      alert("\u041F\u043E\u043B\u044C\u0437\u043E\u0432\u0430\u0442\u0435\u043B\u044C \u0441\u043E\u0437\u0434\u0430\u043D!");
+    } catch (e) { alert("\u041E\u0448\u0438\u0431\u043A\u0430: " + e.message); }
+    finally { setIsCreatingUser(false); }
   };
 
-  const handleCreateOutlet = async (e) => {
-    e.preventDefault();
-    if (!newOutlet.ownerUid) return alert('Выберите владельца');
-    if (!newOutlet.slug || !/^[a-z0-9-]+$/.test(newOutlet.slug)) {
-      return alert('Slug должен содержать только строчные латинские буквы, цифры и дефис.');
-    }
-
-    const userOutlets = outlets.filter(o => o.ownerUid === newOutlet.ownerUid);
-    if (userOutlets.length >= 2) {
-      return alert('Этот пользователь уже достиг лимита в 2 точки.');
-    }
-
+  var handleCreateOutlet = async function(ev) {
+    ev.preventDefault();
+    if (!newOutlet.ownerUid) return alert("\u0412\u044B\u0431\u0435\u0440\u0438\u0442\u0435 \u0432\u043B\u0430\u0434\u0435\u043B\u044C\u0446\u0430");
+    if (!/^[a-z0-9-]+$/.test(newOutlet.slug)) return alert("Slug: \u0442\u043E\u043B\u044C\u043A\u043E \u043B\u0430\u0442\u0438\u043D\u0438\u0446\u0430, \u0446\u0438\u0444\u0440\u044B, \u0434\u0435\u0444\u0438\u0441");
+    if (outlets.filter(function(o) { return o.ownerUid === newOutlet.ownerUid; }).length >= 2) return alert("\u041B\u0438\u043C\u0438\u0442: 2 \u0442\u043E\u0447\u043A\u0438");
     setIsCreatingOutlet(true);
     try {
-      await addDoc(collection(db, 'outlets'), {
-        ownerUid: newOutlet.ownerUid,
-        slug: newOutlet.slug,
-        name: newOutlet.name,
-        address: newOutlet.address,
+      await addDoc(collection(db, "outlets"), {
+        ownerUid: newOutlet.ownerUid, slug: newOutlet.slug, name: newOutlet.name, address: newOutlet.address,
         createdAt: new Date().toISOString(),
-        settings: {
-          baseSalary: 3000,
-          partnerBaseSalary: 1500,
-          itemCommission: 1500,
-          partnerItemCommission: 1500
-        }
+        settings: { baseSalary: 3000, partnerBaseSalary: 1500, itemCommission: 1500, partnerItemCommission: 1500 }
       });
-      setNewOutlet({ name: '', slug: '', ownerUid: '', address: '' });
-      alert('Точка успешно создана!');
-    } catch (err) {
-      alert('Ошибка: ' + err.message);
-    } finally {
-      setIsCreatingOutlet(false);
-    }
+      setNewOutlet({ name: "", slug: "", ownerUid: "", address: "" });
+      alert("\u0422\u043E\u0447\u043A\u0430 \u0441\u043E\u0437\u0434\u0430\u043D\u0430!");
+    } catch (e) { alert("\u041E\u0448\u0438\u0431\u043A\u0430: " + e.message); }
+    finally { setIsCreatingOutlet(false); }
   };
 
-  const runMigration = async () => {
-    if (!window.confirm('ВНИМАНИЕ!бля Эта операция привяжет все старые данные к выбранной точке. Продолжить?')) return;
-    
-    const outletId = prompt('Введите ID точки, к которой нужно привязать старые данные:');
-    if (!outletId) return;
-
+  var runMigration = async function() {
+    if (!window.confirm("\u041F\u0440\u0438\u0432\u044F\u0437\u0430\u0442\u044C \u0441\u0442\u0430\u0440\u044B\u0435 \u0434\u0430\u043D\u043D\u044B\u0435 \u043A \u0442\u043E\u0447\u043A\u0435?")) return;
+    var oid = prompt("ID \u0442\u043E\u0447\u043A\u0438:"); if (!oid) return;
     try {
-      const collectionsToMigrate = ['employees', 'sales', 'inventory_movements', 'inventory_templates'];
-      
-      for (const collName of collectionsToMigrate) {
-        const snap = await getDocs(collection(db, collName));
-        for (const document of snap.docs) {
-          const data = document.data();
-          if (!data.outletId) {
-            await updateDoc(doc(db, collName, document.id), { outletId });
-          }
-        }
+      var cols = ["employees", "sales", "inventory_movements", "inventory_templates"];
+      for (var i = 0; i < cols.length; i++) {
+        var snap = await getDocs(collection(db, cols[i]));
+        snap.docs.forEach(async function(ds) {
+          if (!ds.data().outletId) await updateDoc(doc(db, cols[i], ds.id), { outletId: oid });
+        });
       }
-      alert('Миграция успешно завершена!');
-    } catch (err) {
-      alert('Ошибка миграции: ' + err.message);
-    }
+      alert("\u041C\u0438\u0433\u0440\u0430\u0446\u0438\u044F \u0437\u0430\u0432\u0435\u0440\u0448\u0435\u043D\u0430");
+    } catch (e) { alert("\u041E\u0448\u0438\u0431\u043A\u0430: " + e.message); }
   };
 
-  if (loading) return <div className="min-h-screen bg-slate-950 flex items-center justify-center text-blue-400 font-bold animate-pulse">Инициализация систем...</div>;
+  var baseUrl = window.location.origin + "/";
 
-  return (
-    <div className="min-h-screen bg-[#0B0F19] p-4 lg:p-8 font-sans selection:bg-blue-500/30 text-slate-300 relative overflow-hidden">
-      {/* Background Effects */}
-      <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none">
-        <div className="absolute -top-[20%] -left-[10%] w-[50%] h-[50%] bg-blue-600/10 blur-[120px] rounded-full" />
-        <div className="absolute top-[60%] -right-[10%] w-[40%] h-[60%] bg-indigo-600/10 blur-[120px] rounded-full" />
-      </div>
+  if (loading) return createElement("div", { className: "fixed inset-0 bg-[#080C14] flex items-center justify-center z-50" },
+    createElement("div", { className: "text-center" },
+      createElement("div", { className: "w-12 h-12 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" }),
+      createElement("p", { className: "text-slate-400 font-medium" }, "\u0417\u0430\u0433\u0440\u0443\u0437\u043A\u0430 \u043F\u0430\u043D\u0435\u043B\u0438...")
+    )
+  );
+  if (error) return createElement("div", { className: "fixed inset-0 bg-[#080C14] flex flex-col items-center justify-center text-white p-8 z-50" },
+    createElement("p", { className: "text-red-400 font-bold text-lg mb-4" }, error),
+    createElement("button", { className: "px-6 py-3 bg-blue-600 text-white rounded-xl font-bold",
+      onClick: function() { setError(null); setLoading(true); setTimeout(function() { setLoading(false); }, 100); }
+    }, "\u041F\u043E\u0432\u0442\u043E\u0440\u0438\u0442\u044C")
+  );
 
-      <div className="max-w-6xl mx-auto space-y-8 relative z-10">
-        
-        {/* Header */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center bg-white/[0.02] backdrop-blur-xl p-6 lg:p-8 rounded-[32px] border border-white/[0.05] shadow-2xl">
-          <div className="mb-6 md:mb-0">
-            <div className="inline-block px-3 py-1 bg-blue-500/10 text-blue-400 text-xs font-bold uppercase tracking-widest rounded-full mb-3 border border-blue-500/20">System Access</div>
-            <h1 className="text-4xl font-black text-white tracking-tight">Unitu<span className="text-blue-500">.</span> Nexus</h1>
-            <p className="text-slate-400 mt-2 font-medium">Центр управления франшизами</p>
-          </div>
-          <div className="flex gap-4 w-full md:w-auto">
-            <button 
-              onClick={runMigration}
-              className="flex-1 md:flex-none px-6 py-3.5 bg-white/[0.05] hover:bg-white/[0.1] text-amber-400 border border-amber-500/20 rounded-2xl font-bold transition-all hover:shadow-[0_0_20px_rgba(251,191,36,0.15)]"
-            >
-              DB Migrate
-            </button>
-            <button 
-              onClick={() => signOut(auth)}
-              className="flex-1 md:flex-none px-6 py-3.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 rounded-2xl font-bold transition-all hover:shadow-[0_0_20px_rgba(239,68,68,0.2)]"
-            >
-              Выйти
-            </button>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {/* Create User Form */}
-          <div className="bg-white/[0.02] backdrop-blur-xl p-8 rounded-[32px] border border-white/[0.05] shadow-2xl relative overflow-hidden group">
-            <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/10 blur-[50px] -mr-10 -mt-10 transition-opacity group-hover:opacity-100 opacity-50" />
-            <h2 className="text-2xl font-bold text-white mb-8">Создать пользователя</h2>
-            <form onSubmit={handleCreateUser} className="space-y-5 relative z-10">
-              <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Email</label>
-                <input 
-                  type="email" 
-                  value={newUser.email} 
-                  onChange={e => setNewUser({...newUser, email: e.target.value})}
-                  className="w-full p-4 bg-black/20 border border-white/10 rounded-2xl font-medium text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all"
-                  placeholder="admin@unitu.kz"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Пароль</label>
-                <input 
-                  type="password" 
-                  value={newUser.password} 
-                  onChange={e => setNewUser({...newUser, password: e.target.value})}
-                  className="w-full p-4 bg-black/20 border border-white/10 rounded-2xl font-medium text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all"
-                  placeholder="••••••••"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Роль</label>
-                <select 
-                  value={newUser.role} 
-                  onChange={e => setNewUser({...newUser, role: e.target.value})}
-                  className="w-full p-4 bg-black/20 border border-white/10 rounded-2xl font-medium text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all appearance-none"
-                >
-                  <option value="admin" className="bg-slate-900">Владелец точки (Admin)</option>
-                  <option value="superadmin" className="bg-slate-900">Супер Админ</option>
-                </select>
-              </div>
-              <button 
-                type="submit" 
-                disabled={isCreatingUser}
-                className="w-full mt-4 py-4 bg-blue-600 hover:bg-blue-500 text-white rounded-2xl font-black uppercase tracking-widest shadow-[0_0_20px_rgba(37,99,235,0.3)] hover:shadow-[0_0_30px_rgba(37,99,235,0.5)] hover:-translate-y-0.5 transition-all active:scale-[0.98] disabled:opacity-50 disabled:hover:translate-y-0"
-              >
-                {isCreatingUser ? 'Инициализация...' : 'Зарегистрировать'}
-              </button>
-            </form>
-          </div>
-
-          {/* Create Outlet Form */}
-          <div className="bg-white/[0.02] backdrop-blur-xl p-8 rounded-[32px] border border-white/[0.05] shadow-2xl relative overflow-hidden group">
-            <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/10 blur-[50px] -mr-10 -mt-10 transition-opacity group-hover:opacity-100 opacity-50" />
-            <h2 className="text-2xl font-bold text-white mb-8">Развернуть точку</h2>
-            <form onSubmit={handleCreateOutlet} className="space-y-5 relative z-10">
-              <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Владелец</label>
-                <select 
-                  value={newOutlet.ownerUid} 
-                  onChange={e => setNewOutlet({...newOutlet, ownerUid: e.target.value})}
-                  className="w-full p-4 bg-black/20 border border-white/10 rounded-2xl font-medium text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50 transition-all appearance-none"
-                  required
-                >
-                  <option value="" className="bg-slate-900">Выберите владельца</option>
-                  {users.filter(u => u.role === 'admin').map(u => (
-                    <option key={u.id} value={u.uid} className="bg-slate-900">{u.email}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Название</label>
-                  <input 
-                    type="text" 
-                    value={newOutlet.name} 
-                    onChange={e => setNewOutlet({...newOutlet, name: e.target.value})}
-                    className="w-full p-4 bg-black/20 border border-white/10 rounded-2xl font-medium text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50 transition-all"
-                    placeholder="My Lounge"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">URL Slug</label>
-                  <input 
-                    type="text" 
-                    value={newOutlet.slug} 
-                    onChange={e => setNewOutlet({...newOutlet, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '')})}
-                    className="w-full p-4 bg-black/20 border border-white/10 rounded-2xl font-medium text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50 transition-all"
-                    placeholder="my-lounge"
-                    required
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Адрес (Опц.)</label>
-                <input 
-                  type="text" 
-                  value={newOutlet.address} 
-                  onChange={e => setNewOutlet({...newOutlet, address: e.target.value})}
-                  className="w-full p-4 bg-black/20 border border-white/10 rounded-2xl font-medium text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50 transition-all"
-                  placeholder="г. Алматы"
-                />
-              </div>
-              <button 
-                type="submit" 
-                disabled={isCreatingOutlet}
-                className="w-full mt-4 py-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-2xl font-black uppercase tracking-widest shadow-[0_0_20px_rgba(79,70,229,0.3)] hover:shadow-[0_0_30px_rgba(79,70,229,0.5)] hover:-translate-y-0.5 transition-all active:scale-[0.98] disabled:opacity-50 disabled:hover:translate-y-0"
-              >
-                {isCreatingOutlet ? 'Создание...' : 'Запустить точку'}
-              </button>
-            </form>
-          </div>
-        </div>
-
-        {/* Lists */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          <div className="bg-white/[0.02] backdrop-blur-xl p-8 rounded-[32px] border border-white/[0.05] shadow-2xl">
-            <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-3">
-              <span className="w-2 h-2 rounded-full bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.8)]"></span>
-              База пользователей
-            </h2>
-            <div className="space-y-3">
-              {users.map(u => (
-                <div key={u.id} className="p-5 border border-white/[0.05] rounded-2xl bg-black/20 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 hover:bg-black/40 transition-colors">
-                  <div>
-                    <p className="font-bold text-white">{u.email}</p>
-                    <div className="flex gap-2 mt-2">
-                      <span className={`px-2 py-0.5 text-[10px] font-black uppercase tracking-widest rounded-full ${u.role === 'superadmin' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' : 'bg-blue-500/20 text-blue-400 border border-blue-500/30'}`}>
-                        {u.role}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="text-xs text-slate-500 font-mono bg-black/40 px-3 py-1.5 rounded-lg border border-white/5">{u.uid.substring(0, 10)}...</div>
-                </div>
-              ))}
-              {users.length === 0 && <p className="text-slate-500 text-center py-10 font-medium">База пуста</p>}
-            </div>
-          </div>
-
-          <div className="bg-white/[0.02] backdrop-blur-xl p-8 rounded-[32px] border border-white/[0.05] shadow-2xl">
-            <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-3">
-              <span className="w-2 h-2 rounded-full bg-indigo-500 shadow-[0_0_10px_rgba(99,102,241,0.8)]"></span>
-              Активные точки
-            </h2>
-            <div className="space-y-3">
-              {outlets.map(o => {
-                const owner = users.find(u => u.uid === o.ownerUid);
-                return (
-                  <div key={o.id} className="p-5 border border-white/[0.05] rounded-2xl bg-black/20 hover:bg-black/40 transition-colors">
-                    <div className="flex justify-between items-start mb-3">
-                      <h3 className="font-bold text-white text-lg">{o.name}</h3>
-                      <span className="px-3 py-1 bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 rounded-lg text-xs font-bold tracking-wide">
-                        /{o.slug}
-                      </span>
-                    </div>
-                    <div className="flex flex-col gap-1">
-                      <p className="text-sm text-slate-400 font-medium flex items-center gap-2">
-                        <span className="w-1.5 h-1.5 rounded-full bg-slate-600"></span>
-                        {owner ? owner.email : 'Владелец не найден'}
-                      </p>
-                      {o.address && (
-                        <p className="text-xs text-slate-500 flex items-center gap-2">
-                          <span className="w-1.5 h-1.5 rounded-full bg-transparent"></span>
-                          {o.address}
-                        </p>
-                      )}
-                    </div>
-                  </div>
+  return createElement("div", { className: "fixed inset-0 bg-[#080C14] overflow-auto font-sans text-slate-300" },
+    createElement("div", { className: "absolute top-0 left-0 w-full h-full pointer-events-none overflow-hidden" },
+      createElement("div", { className: "absolute -top-40 -right-40 w-96 h-96 bg-blue-600/5 blur-[150px] rounded-full" }),
+      createElement("div", { className: "absolute top-60 right-20 w-80 h-80 bg-violet-600/5 blur-[150px] rounded-full" })
+    ),
+    createElement("div", { className: "max-w-7xl mx-auto px-4 py-6 lg:px-8 lg:py-8 relative z-10" },
+      createElement("div", { className: "flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8" },
+        createElement("div", null,
+          createElement("h1", { className: "text-3xl font-black text-white tracking-tight" },
+            "Unitu", createElement("span", { className: "text-blue-500" }, "."),
+            createElement("span", { className: "text-slate-500 font-medium text-lg ml-2" }, "\u041F\u0430\u043D\u0435\u043B\u044C \u0443\u043F\u0440\u0430\u0432\u043B\u0435\u043D\u0438\u044F")
+          )
+        ),
+        createElement("div", { className: "flex gap-2" },
+          createElement("button", { className: "flex items-center gap-2 px-4 py-2.5 bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded-xl text-sm font-bold hover:bg-amber-500/20 transition-all", onClick: runMigration },
+            createElement(Database, { size: 16 }), " \u041C\u0438\u0433\u0440\u0430\u0446\u0438\u044F"
+          ),
+          createElement("button", { className: "flex items-center gap-2 px-4 py-2.5 bg-white/5 text-slate-400 border border-white/10 rounded-xl text-sm font-bold hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/20 transition-all",
+            onClick: function() { signOut(auth); }
+          }, createElement(LogOut, { size: 16 }), " \u0412\u044B\u0439\u0442\u0438")
+        )
+      ),
+      createElement("div", { className: "grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8" },
+        createElement(StatCard, { icon: Users, label: "\u041F\u043E\u043B\u044C\u0437\u043E\u0432\u0430\u0442\u0435\u043B\u0438", value: users.length, color: "bg-blue-500/20 text-blue-400" }),
+        createElement(StatCard, { icon: Store, label: "\u0422\u043E\u0447\u043A\u0438", value: outlets.length, color: "bg-indigo-500/20 text-indigo-400" }),
+        createElement(StatCard, { icon: Shield, label: "\u0421\u0443\u043F\u0435\u0440\u0430\u0434\u043C\u0438\u043D\u044B", value: users.filter(function(u) { return u.role === "superadmin"; }).length, color: "bg-amber-500/20 text-amber-400" }),
+        createElement(StatCard, { icon: Building, label: "\u0412\u043B\u0430\u0434\u0435\u043B\u044C\u0446\u044B", value: users.filter(function(u) { return u.role === "admin"; }).length, color: "bg-emerald-500/20 text-emerald-400" })
+      ),
+      createElement("div", { className: "flex gap-1 bg-white/[0.03] border border-white/[0.06] rounded-2xl p-1 mb-8 w-fit" },
+        [{ k: "overview", i: Store, l: "\u041E\u0431\u0437\u043E\u0440" }, { k: "users", i: UserPlus, l: "\u041F\u043E\u043B\u044C\u0437\u043E\u0432\u0430\u0442\u0435\u043B\u0438" }, { k: "outlets", i: Building, l: "\u0422\u043E\u0447\u043A\u0438" }].map(function(t) {
+          return createElement("button", {
+            key: t.k, onClick: function() { setActiveSection(t.k); },
+            className: "flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all " + (activeSection === t.k ? "bg-blue-600 text-white shadow-lg shadow-blue-600/25" : "text-slate-400 hover:text-white hover:bg-white/5")
+          }, createElement(t.i, { size: 16 }), " " + t.l);
+        })
+      ),
+      activeSection === "overview" && createElement("div", { className: "grid grid-cols-1 lg:grid-cols-2 gap-6" },
+        createElement("div", { className: "bg-white/[0.03] border border-white/[0.06] rounded-3xl p-6 lg:p-8" },
+          createElement("div", { className: "flex items-center gap-3 mb-6" },
+            createElement("div", { className: "w-10 h-10 rounded-xl bg-blue-500/20 flex items-center justify-center text-blue-400" }, createElement(UserPlus, { size: 20 })),
+            createElement("h2", { className: "text-lg font-bold text-white" }, "\u041D\u043E\u0432\u044B\u0439 \u043F\u043E\u043B\u044C\u0437\u043E\u0432\u0430\u0442\u0435\u043B\u044C")
+          ),
+          createElement("form", { className: "space-y-4", onSubmit: handleCreateUser },
+            createElement("input", { type: "email", placeholder: "email@example.com", required: true, value: newUser.email,
+              className: "w-full p-3.5 bg-black/30 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all text-sm",
+              onChange: function(ev) { setNewUser({...newUser, email: ev.target.value}); }
+            }),
+            createElement("input", { type: "password", placeholder: "\u041F\u0430\u0440\u043E\u043B\u044C", required: true, value: newUser.password,
+              className: "w-full p-3.5 bg-black/30 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all text-sm",
+              onChange: function(ev) { setNewUser({...newUser, password: ev.target.value}); }
+            }),
+            createElement("select", { value: newUser.role,
+              className: "w-full p-3.5 bg-black/30 border border-white/10 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all text-sm appearance-none",
+              onChange: function(ev) { setNewUser({...newUser, role: ev.target.value}); }
+            },
+              createElement("option", { className: "bg-slate-900", value: "admin" }, "\u0412\u043B\u0430\u0434\u0435\u043B\u0435\u0446 \u0442\u043E\u0447\u043A\u0438"),
+              createElement("option", { className: "bg-slate-900", value: "superadmin" }, "\u0421\u0443\u043F\u0435\u0440 \u0410\u0434\u043C\u0438\u043D")
+            ),
+            createElement("button", { type: "submit", disabled: isCreatingUser,
+              className: "w-full py-3.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold text-sm transition-all active:scale-[0.98] disabled:opacity-50"
+            }, isCreatingUser ? "\u0421\u043E\u0437\u0434\u0430\u043D\u0438\u0435..." : "\u0417\u0430\u0440\u0435\u0433\u0438\u0441\u0442\u0440\u0438\u0440\u043E\u0432\u0430\u0442\u044C")
+          )
+        ),
+        createElement("div", { className: "bg-white/[0.03] border border-white/[0.06] rounded-3xl p-6 lg:p-8" },
+          createElement("div", { className: "flex items-center gap-3 mb-6" },
+            createElement("div", { className: "w-10 h-10 rounded-xl bg-indigo-500/20 flex items-center justify-center text-indigo-400" }, createElement(Plus, { size: 20 })),
+            createElement("h2", { className: "text-lg font-bold text-white" }, "\u041D\u043E\u0432\u0430\u044F \u0442\u043E\u0447\u043A\u0430")
+          ),
+          createElement("form", { className: "space-y-4", onSubmit: handleCreateOutlet },
+            createElement("select", { required: true, value: newOutlet.ownerUid,
+              className: "w-full p-3.5 bg-black/30 border border-white/10 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all text-sm appearance-none",
+              onChange: function(ev) { setNewOutlet({...newOutlet, ownerUid: ev.target.value}); }
+            },
+              createElement("option", { className: "bg-slate-900", value: "" }, "\u0412\u044B\u0431\u0435\u0440\u0438\u0442\u0435 \u0432\u043B\u0430\u0434\u0435\u043B\u044C\u0446\u0430"),
+              users.filter(function(u) { return u.role === "admin"; }).map(function(u) {
+                return createElement("option", { key: u.id, className: "bg-slate-900", value: u.uid || u.id }, u.email);
+              })
+            ),
+            createElement("div", { className: "grid grid-cols-2 gap-3" },
+              createElement("input", { type: "text", placeholder: "\u041D\u0430\u0437\u0432\u0430\u043D\u0438\u0435", required: true, value: newOutlet.name,
+                className: "p-3.5 bg-black/30 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all text-sm",
+                onChange: function(ev) { setNewOutlet({...newOutlet, name: ev.target.value}); }
+              }),
+              createElement("input", { type: "text", placeholder: "slug", required: true, value: newOutlet.slug,
+                className: "p-3.5 bg-black/30 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all text-sm",
+                onChange: function(ev) { setNewOutlet({...newOutlet, slug: ev.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "")}); }
+              })
+            ),
+            createElement("input", { type: "text", placeholder: "\u0410\u0434\u0440\u0435\u0441 (\u043D\u0435\u043E\u0431\u044F\u0437\u0430\u0442\u0435\u043B\u044C\u043D\u043E)", value: newOutlet.address,
+              className: "w-full p-3.5 bg-black/30 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all text-sm",
+              onChange: function(ev) { setNewOutlet({...newOutlet, address: ev.target.value}); }
+            }),
+            createElement("button", { type: "submit", disabled: isCreatingOutlet,
+              className: "w-full py-3.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold text-sm transition-all active:scale-[0.98] disabled:opacity-50"
+            }, isCreatingOutlet ? "\u0421\u043E\u0437\u0434\u0430\u043D\u0438\u0435..." : "\u0417\u0430\u043F\u0443\u0441\u0442\u0438\u0442\u044C \u0442\u043E\u0447\u043A\u0443")
+          )
+        )
+      ),
+      activeSection === "users" && createElement("div", { className: "bg-white/[0.03] border border-white/[0.06] rounded-3xl overflow-hidden" },
+        createElement("div", { className: "p-6 lg:p-8 border-b border-white/[0.05] flex justify-between items-center" },
+          createElement("h2", { className: "text-lg font-bold text-white" }, "\u0412\u0441\u0435 \u043F\u043E\u043B\u044C\u0437\u043E\u0432\u0430\u0442\u0435\u043B\u0438"),
+          createElement("span", { className: "text-xs text-slate-500 font-mono" }, users.length + " \u0430\u043A\u043A\u0430\u0443\u043D\u0442\u043E\u0432")
+        ),
+        createElement("div", { className: "divide-y divide-white/[0.04]" },
+          users.length === 0
+            ? createElement("p", { className: "text-slate-500 text-center py-16" }, "\u041D\u0435\u0442 \u043F\u043E\u043B\u044C\u0437\u043E\u0432\u0430\u0442\u0435\u043B\u0435\u0439")
+            : users.map(function(u) {
+                var oc = outlets.filter(function(o) { return o.ownerUid === (u.uid || u.id); }).length;
+                return createElement("div", { key: u.id, className: "p-5 lg:px-8 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 hover:bg-white/[0.02] transition-colors" },
+                  createElement("div", { className: "flex items-center gap-4" },
+                    createElement("div", { className: "w-10 h-10 rounded-xl flex items-center justify-center font-black text-sm " + (u.role === "superadmin" ? "bg-amber-500/20 text-amber-400" : "bg-blue-500/20 text-blue-400") },
+                      u.email ? u.email[0].toUpperCase() : "?"
+                    ),
+                    createElement("div", null,
+                      createElement("p", { className: "font-bold text-white text-sm" }, u.email || "\u0411\u0435\u0437 email"),
+                      createElement("span", { className: "inline-block mt-1 px-2 py-0.5 text-[10px] font-bold uppercase rounded-full " + (u.role === "superadmin" ? "bg-amber-500/10 text-amber-400 border border-amber-500/20" : "bg-blue-500/10 text-blue-400 border border-blue-500/20") },
+                        u.role === "superadmin" ? "\u0421\u0443\u043F\u0435\u0440\u0430\u0434\u043C\u0438\u043D" : "\u0412\u043B\u0430\u0434\u0435\u043B\u0435\u0446")
+                    )
+                  ),
+                  createElement("div", { className: "flex items-center gap-3" },
+                    createElement("span", { className: "text-xs text-slate-500 font-mono bg-black/30 px-3 py-1.5 rounded-lg" }, (u.uid || u.id).substring(0, 12)),
+                    oc > 0 && createElement("span", { className: "text-xs text-slate-400" }, oc + (oc === 1 ? " \u0442\u043E\u0447\u043A\u0430" : oc < 5 ? " \u0442\u043E\u0447\u043A\u0438" : " \u0442\u043E\u0447\u0435\u043A"))
+                  )
                 );
-              })}
-              {outlets.length === 0 && <p className="text-slate-500 text-center py-10 font-medium">Нет активных точек</p>}
-            </div>
-          </div>
-        </div>
-
-      </div>
-    </div>
+              })
+        )
+      ),
+      activeSection === "outlets" && createElement("div", { className: "bg-white/[0.03] border border-white/[0.06] rounded-3xl overflow-hidden" },
+        createElement("div", { className: "p-6 lg:p-8 border-b border-white/[0.05] flex justify-between items-center" },
+          createElement("h2", { className: "text-lg font-bold text-white" }, "\u0412\u0441\u0435 \u0442\u043E\u0447\u043A\u0438"),
+          createElement("span", { className: "text-xs text-slate-500 font-mono" }, outlets.length + " \u0430\u043A\u0442\u0438\u0432\u043D\u044B\u0445")
+        ),
+        createElement("div", { className: "divide-y divide-white/[0.04]" },
+          outlets.length === 0
+            ? createElement("p", { className: "text-slate-500 text-center py-16" }, "\u041D\u0435\u0442 \u0430\u043A\u0442\u0438\u0432\u043D\u044B\u0445 \u0442\u043E\u0447\u0435\u043A")
+            : outlets.map(function(o) {
+                var ow = users.find(function(u) { return (u.uid || u.id) === o.ownerUid; });
+                var url = baseUrl + o.slug;
+                return createElement("div", { key: o.id, className: "p-5 lg:px-8 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 hover:bg-white/[0.02] transition-colors" },
+                  createElement("div", { className: "flex items-center gap-4" },
+                    createElement("div", { className: "w-10 h-10 rounded-xl bg-indigo-500/20 flex items-center justify-center text-indigo-400 font-black text-sm" },
+                      o.name ? o.name[0].toUpperCase() : "?"
+                    ),
+                    createElement("div", null,
+                      createElement("p", { className: "font-bold text-white text-sm" }, o.name || "\u0411\u0435\u0437 \u043D\u0430\u0437\u0432\u0430\u043D\u0438\u044F"),
+                      createElement("div", { className: "flex gap-2 mt-1" },
+                        createElement("span", { className: "px-2 py-0.5 text-[10px] font-bold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 rounded-full" }, "/" + o.slug),
+                        o.address && createElement("span", { className: "text-xs text-slate-500 truncate max-w-[150px]" }, o.address)
+                      )
+                    )
+                  ),
+                  createElement("div", { className: "flex items-center gap-2" },
+                    createElement("span", { className: "text-xs text-slate-500" }, ow ? ow.email : "\u041D\u0435\u0442 \u0432\u043B\u0430\u0434\u0435\u043B\u044C\u0446\u0430"),
+                    createElement("button", { title: url, className: "flex items-center gap-1.5 px-3 py-1.5 bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white border border-white/10 rounded-lg text-xs font-medium transition-all",
+                      onClick: function() { navigator.clipboard.writeText(url); setCopiedSlug(o.id); setTimeout(function() { setCopiedSlug(null); }, 1500); }
+                    },
+                      copiedSlug === o.id ? createElement(Check, { size: 14, className: "text-emerald-400" }) : createElement(Copy, { size: 14 }),
+                      createElement("span", { className: "hidden sm:inline truncate max-w-[140px]" }, o.slug)
+                    ),
+                    createElement("a", { className: "p-1.5 hover:bg-white/10 rounded-lg text-slate-400 hover:text-white transition-all", href: url, target: "_blank", rel: "noreferrer" },
+                      createElement(ExternalLink, { size: 16 })
+                    )
+                  )
+                );
+              })
+        )
+      )
+    )
   );
 };
 

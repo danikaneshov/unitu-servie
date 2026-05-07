@@ -24,7 +24,8 @@ const AdminDashboard = () => {
   const currentOutlet = outlets.find(o => o.slug === company_slug);
   const currentOutletId = currentOutlet ? currentOutlet.id : null;
   const [outletSettings, setOutletSettings] = useState({
-    baseSalary: 3000, partnerBaseSalary: 1500, itemCommission: 1500, partnerItemCommission: 1500
+    baseSalary: 3000, partnerBaseSalary: 1500, itemCommission: 1500, partnerItemCommission: 1500,
+    item1Name: '', item2Name: ''
   });
 
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -546,7 +547,7 @@ const AdminDashboard = () => {
                   <h2 className="text-lg font-black text-slate-900">Динамика выплат ЗП</h2>
                 </div>
                 <div className="h-64">
-                  <ResponsiveContainer width="100%" height="100%">
+                  <ResponsiveContainer width="100%" height="100%" minWidth={200}>
                     <AreaChart data={chartData}>
                       <defs>
                         <linearGradient id="salaryGradient" x1="0" y1="0" x2="0" y2="1">
@@ -570,7 +571,7 @@ const AdminDashboard = () => {
                   <h2 className="text-lg font-black text-slate-900">Кальяны vs Замены</h2>
                 </div>
                 <div className="h-64">
-                  <ResponsiveContainer width="100%" height="100%">
+                  <ResponsiveContainer width="100%" height="100%" minWidth={200}>
                     <BarChart data={chartData}>
                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F1F5F9" />
                       <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#CBD5E1', fontSize: 12}} dy={10} />
@@ -1393,6 +1394,11 @@ const AdminDashboard = () => {
                   <div><label className="block text-xs font-bold text-slate-400 uppercase mb-2">Базовый оклад напарника (₸)</label><input type="number" value={outletSettings.partnerBaseSalary} onChange={e=>setOutletSettings({...outletSettings, partnerBaseSalary: Number(e.target.value)})} className="w-full p-4 bg-slate-50 rounded-2xl border-none focus:ring-2 focus:ring-blue-500 font-black text-lg text-slate-800" /></div>
                   <div><label className="block text-xs font-bold text-slate-400 uppercase mb-2">Ставка за 1 кальян/замену (₸)</label><input type="number" value={outletSettings.itemCommission} onChange={e=>setOutletSettings({...outletSettings, itemCommission: Number(e.target.value)})} className="w-full p-4 bg-slate-50 rounded-2xl border-none focus:ring-2 focus:ring-blue-500 font-black text-lg text-slate-800" /></div>
                   <div><label className="block text-xs font-bold text-slate-400 uppercase mb-2">Ставка напарника за кальян/замену (₸)</label><input type="number" value={outletSettings.partnerItemCommission} onChange={e=>setOutletSettings({...outletSettings, partnerItemCommission: Number(e.target.value)})} className="w-full p-4 bg-slate-50 rounded-2xl border-none focus:ring-2 focus:ring-blue-500 font-black text-lg text-slate-800" /></div>
+
+                  <h3 className="text-lg font-black text-slate-900 mt-8 mb-2 border-t border-slate-100 pt-8">Названия позиций в чеке</h3>
+                  <p className="text-xs text-slate-400 mb-4">Как эти позиции записаны на чеке, который фоткают сотрудники.</p>
+                  <div><label className="block text-xs font-bold text-slate-400 uppercase mb-2">Кальян (позиция 1)</label><input type="text" value={outletSettings.item1Name || ''} onChange={e=>setOutletSettings({...outletSettings, item1Name: e.target.value})} placeholder="Дымный коктейль 1" className="w-full p-4 bg-slate-50 rounded-2xl border-none focus:ring-2 focus:ring-blue-500 font-bold text-slate-800" /></div>
+                  <div><label className="block text-xs font-bold text-slate-400 uppercase mb-2">Замена (позиция 2)</label><input type="text" value={outletSettings.item2Name || ''} onChange={e=>setOutletSettings({...outletSettings, item2Name: e.target.value})} placeholder="Дымный коктейль 2" className="w-full p-4 bg-slate-50 rounded-2xl border-none focus:ring-2 focus:ring-blue-500 font-bold text-slate-800" /></div>
 
                   <h3 className="text-lg font-black text-slate-900 mt-8 mb-2 border-t border-slate-100 pt-8">Чистая прибыль аутсорса</h3>
                   <div><label className="block text-xs font-bold text-slate-400 uppercase mb-2">Прибыль с 1 Кальяна (₸)</label><input type="number" value={ownerProfits.hookah} onChange={e=>setOwnerProfits({...ownerProfits, hookah: Number(e.target.value)})} className="w-full p-4 bg-slate-50 rounded-2xl border-none focus:ring-2 focus:ring-blue-500 font-black text-lg text-slate-800" /></div>

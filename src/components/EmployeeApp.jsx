@@ -312,7 +312,11 @@ const EmployeeApp = () => {
 
       const aiRes = await fetch('/api/analyze', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ imageUrl: uploadedImageUrl }),
+        body: JSON.stringify({
+          imageUrl: uploadedImageUrl,
+          item1Name: outletSettings.item1Name,
+          item2Name: outletSettings.item2Name
+        }),
       });
       
       if (!aiRes.ok) {

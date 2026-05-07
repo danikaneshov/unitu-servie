@@ -31,11 +31,16 @@ const AdminLogin = () => {
       const snap = await getDocs(q);
       
       if (!snap.empty) {
-        const outlet = snap.docs[0].data();
-        if (outlet.slug) {
-          navigate(`/${outlet.slug}/admin`);
+        const outletsList = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        if (outletsList.length > 1) {
+          navigate('/select-outlet');
         } else {
-          setError('Ошибка: точка не настроена (нет slug).');
+          const outlet = outletsList[0];
+          if (outlet.slug) {
+            navigate(`/${outlet.slug}/admin`);
+          } else {
+            setError('Ошибка: точка не настроена (нет slug).');
+          }
         }
       } else {
         setError('У вас нет привязанных точек. Обратитесь к суперадмину.');
